@@ -1,0 +1,179 @@
+"""
+Django settings for the RouteFuel API.
+
+All deployment-specific values are read from environment variables (optionally
+loaded from a ``.env`` file at the repository root). See ``.env.example``.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
+REPO_ROOT = BASE_DIR.parent
+
+# Real environment variables always win over values in the .env file.
+load_dotenv(REPO_ROOT / ".env", override=False)
+
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off", ""}
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in _TRUE_VALUES:
+        return True
+    if value in _FALSE_VALUES:
+        return False
+    raise ImproperlyConfigured(f"{name} must be a boolean (true/false), got {raw!r}.")
+
+
+def env_list(name: str, default: str = "") -> list[str]:
+    raw = os.environ.get(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be a number, got {raw!r}.") from exc
+    if value <= 0:
+        raise ImproperlyConfigured(f"{name} must be greater than zero, got {raw!r}.")
+    return value
+
+
+# --------------------------------------------------------------------------
+# Core
+# --------------------------------------------------------------------------
+
+# Safe default: debug is OFF unless explicitly enabled.
+DEBUG = env_bool("DJANGO_DEBUG", default=False)
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is false. "
+            "Copy .env.example to .env for local development."
+        )
+    SECRET_KEY = "django-insecure-local-development-only"  # noqa: S105
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1")
+
+INSTALLED_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "django.contrib.staticfiles",
+    # Third party
+    "rest_framework",
+    "corsheaders",
+    # Local
+    "apps.core",
+    "apps.routing",
+    "apps.fuel",
+    "apps.optimization",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    },
+]
+
+# --------------------------------------------------------------------------
+# Database
+# --------------------------------------------------------------------------
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+    }
+}
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------------------------------
+# Internationalization & static files
+# --------------------------------------------------------------------------
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = False
+USE_TZ = True
+
+STATIC_URL = "static/"
+
+# --------------------------------------------------------------------------
+# Django REST Framework
+# --------------------------------------------------------------------------
+
+_renderers = ["rest_framework.renderers.JSONRenderer"]
+if DEBUG:
+    _renderers.append("rest_framework.renderers.BrowsableAPIRenderer")
+
+REST_FRAMEWORK = {
+    # Public, read-only assessment API: no authentication layer.
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
+    "UNAUTHENTICATED_USER": None,
+    "DEFAULT_RENDERER_CLASSES": _renderers,
+    "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
+}
+
+# --------------------------------------------------------------------------
+# CORS (for the future Next.js dashboard)
+# --------------------------------------------------------------------------
+
+CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", default="http://localhost:3000")
+CORS_URLS_REGEX = r"^/api/.*$"
+
+# --------------------------------------------------------------------------
+# Routing provider (used from M2 onwards)
+# --------------------------------------------------------------------------
+
+ROUTING_BASE_URL = os.environ.get("ROUTING_BASE_URL", "https://router.project-osrm.org").rstrip("/")
+ROUTING_TIMEOUT = env_float("ROUTING_TIMEOUT", default=10.0)
+
+# --------------------------------------------------------------------------
+# Logging
+# --------------------------------------------------------------------------
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
+    # Replace Django's default "django" logger so records are emitted once, via root.
+    "loggers": {"django": {"handlers": [], "level": "INFO", "propagate": True}},
+}

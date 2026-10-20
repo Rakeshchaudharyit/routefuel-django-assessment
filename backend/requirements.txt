@@ -1,0 +1,6 @@
+# Runtime dependencies (verified against PyPI release data, October 2026)
+Django>=6.1.2,<6.2
+djangorestframework>=3.18.3,<3.19
+django-cors-headers>=4.9,<5
+httpx>=0.28,<0.29
+python-dotenv>=1.0,<2
