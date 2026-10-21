@@ -6,8 +6,8 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 |---|-----------|-------|--------|
 | M0 | Django Foundation | Claude | ✅ |
 | M1 | Fuel Data Processing & Station Geolocation | Claude | ✅ |
-| M2 | Routing API Integration | Claude | ⏳ |
-| M3 | Fuel Optimization Engine | Claude | ⬜ |
+| M2 | Routing API Integration | Claude | ✅ (live call from Django pending) |
+| M3 | Fuel Optimization Engine | Claude | ⏳ |
 | M4 | API Validation & Performance | Claude | ⬜ |
 | M5 | Professional SaaS Dashboard | Codex | ⬜ |
 | M6 | Interactive Map & API Integration | Codex | ⬜ |
@@ -46,12 +46,35 @@ generated files committed.
 
 ## M2 — Routing API Integration
 
-- Resolve start/finish (US only) without per-request geocoding calls where possible.
-- One OSRM `route` request per uncached trip; full GeoJSON geometry and distance.
-- Timeouts, provider-error mapping to clean 4xx/5xx responses, response caching.
-- Tests use mocked HTTP (no network in CI).
+- `POST /api/v1/routes/` accepting `"City, ST"` / `"City, State"` or `{latitude, longitude}`
+  for `start` and `finish` (mixable).
+- Offline resolution: M1 Census gazetteer for places (ambiguous names rejected with candidates);
+  Natural Earth 1:10m state polygons for coordinates (true point-in-polygon, 50 states + DC).
+- `RoutingProvider` protocol + `OsrmProvider`: one GET per uncached route
+  (`overview=full&geometries=geojson`), identifying User-Agent, connect ≤ 5 s / read
+  `ROUTING_TIMEOUT`, no retries, strict response validation, explicit error codes.
+- Distance in miles (÷ 1609.344), duration in minutes, GeoJSON `LineString`, `meta` with
+  `cached`, `routing_requests` and the OSRM/OSM attribution the usage policy requires.
+- Database cache (`routefuel_cache`, created by migration), deterministic direction-aware key,
+  7-day TTL, errors never cached, cache faults non-fatal.
+- Pooled HTTP client and startup preload of reference data.
 
-**Done when:** a route request makes at most one external call, and every failure mode returns a documented error.
+**Verified (2026-10-21):** 261 tests pass (137 from M0/M1 + 124 new), including all failure
+modes, cache reuse and request counting with OSRM mocked; `manage.py check`, `makemigrations
+--check`, `ruff check`, `ruff format --check` clean. Fresh-database smoke test: `migrate` creates
+the cache table, `import_fuel_prices` reproduces the M1 numbers (6,626 / 6,228 / 398), and every
+documented response was exercised over HTTP against a local OSRM stand-in. Local overhead with
+the stand-in: 5.5 ms uncached / 2.2 ms cached (tiny geometry), 200 ms / 72 ms (50k-point
+geometry); exactly one provider call per uncached route.
+
+**Not yet verified:** a live OSRM call *from the Django client* — the build machine and the
+linked computer both block the host. The public server itself was queried separately
+(Dallas → Atlanta: 1,259,435.7 m = 782.58 mi; New York → Los Angeles: 2,794.21 mi), confirming the
+request and response format. Run the README curl examples against `runserver` on an unrestricted
+network to close this.
+
+**Endpoint naming:** M2 ships `POST /api/v1/routes/`. M3/M4 decide whether fuel stops extend this
+response or live on a separate `route-plan` endpoint.
 
 ## M3 — Fuel Optimization Engine
 
@@ -65,7 +88,8 @@ generated files committed.
 
 ## M4 — API Validation & Performance
 
-- Final request/response contract for `POST /api/v1/route-plan/` (name confirmed in M2).
+- Final request/response contract (extend `POST /api/v1/routes/` or add `route-plan/`).
+- Response size: gzip and/or a simplified display geometry for long routes.
 - Input validation with field-level errors.
 - Query efficiency (indexed bounding-box prefilter), timing measurements, caching.
 

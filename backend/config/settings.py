@@ -53,6 +53,19 @@ def env_float(name: str, default: float) -> float:
     return value
 
 
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be an integer, got {raw!r}.") from exc
+    if value <= 0:
+        raise ImproperlyConfigured(f"{name} must be greater than zero, got {raw!r}.")
+    return value
+
+
 # --------------------------------------------------------------------------
 # Core
 # --------------------------------------------------------------------------
@@ -159,11 +172,31 @@ CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", default="http://l
 CORS_URLS_REGEX = r"^/api/.*$"
 
 # --------------------------------------------------------------------------
-# Routing provider (used from M2 onwards)
+# Cache. Database-backed so cached routes survive restarts without extra
+# infrastructure; the table is created by the routing app's migration.
+# --------------------------------------------------------------------------
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "routefuel_cache",
+        "OPTIONS": {"MAX_ENTRIES": 5000},
+    }
+}
+
+# --------------------------------------------------------------------------
+# Routing provider (M2)
 # --------------------------------------------------------------------------
 
 ROUTING_BASE_URL = os.environ.get("ROUTING_BASE_URL", "https://router.project-osrm.org").rstrip("/")
 ROUTING_TIMEOUT = env_float("ROUTING_TIMEOUT", default=10.0)
+# The OSRM demo-server policy requires an identifying User-Agent.
+ROUTING_USER_AGENT = os.environ.get(
+    "ROUTING_USER_AGENT", "RouteFuel/0.2 (Spotter AI assessment; Django route planner)"
+).strip()
+if not ROUTING_USER_AGENT:
+    raise ImproperlyConfigured("ROUTING_USER_AGENT must not be blank.")
+ROUTE_CACHE_TTL = env_int("ROUTE_CACHE_TTL", default=7 * 24 * 60 * 60)
 
 # --------------------------------------------------------------------------
 # Fuel data (M1). Files live in the repository; nothing is fetched at runtime.
@@ -171,6 +204,7 @@ ROUTING_TIMEOUT = env_float("ROUTING_TIMEOUT", default=10.0)
 
 FUEL_PRICES_CSV_PATH = BASE_DIR / "data" / "fuel-prices-for-be-assessment.csv"
 GAZETTEER_PLACES_PATH = BASE_DIR / "data" / "reference" / "Gaz_places_national.txt"
+US_STATE_BOUNDARIES_PATH = BASE_DIR / "data" / "reference" / "us_states_ne_10m.geojson"
 
 # --------------------------------------------------------------------------
 # Logging

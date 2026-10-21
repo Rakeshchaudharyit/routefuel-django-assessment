@@ -4,8 +4,8 @@ A Django REST API that plans a driving route between two US locations and recomm
 buy fuel so the trip costs as little as possible. Built as the backend assessment for the
 Backend Django Engineer role at Spotter AI.
 
-> **Status:** M0 (foundation) and M1 (fuel data) complete. Routing and optimisation arrive in
-> M2–M4 — see [docs/milestones.md](docs/milestones.md).
+> **Status:** M0 (foundation), M1 (fuel data) and M2 (routing) complete. Fuel-stop optimisation
+> arrives in M3 — see [docs/milestones.md](docs/milestones.md).
 
 ## Assessment requirements
 
@@ -48,7 +48,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-python manage.py migrate
+python manage.py migrate                 # also creates the route cache table
 python manage.py import_fuel_prices      # load the CSV + offline geolocation (~2 s)
 ```
 
@@ -64,9 +64,11 @@ Real environment variables take precedence over `.env`.
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated hosts |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origins allowed to call `/api/*` |
 | `ROUTING_BASE_URL` | `https://router.project-osrm.org` | OSRM-compatible routing server |
-| `ROUTING_TIMEOUT` | `10` | Routing request timeout in seconds (must be > 0) |
+| `ROUTING_TIMEOUT` | `10` | Routing request timeout in seconds (must be > 0; connect capped at 5) |
+| `ROUTING_USER_AGENT` | `RouteFuel/0.2 (Spotter AI assessment; …)` | User-Agent sent to the routing server (required by the OSRM usage policy) |
+| `ROUTE_CACHE_TTL` | `604800` (7 days) | Seconds a successful route stays cached (must be > 0) |
 
-Invalid values (e.g. `DJANGO_DEBUG=maybe`, `ROUTING_TIMEOUT=0`) fail fast at startup with a clear message.
+Invalid values (e.g. `DJANGO_DEBUG=maybe`, `ROUTING_TIMEOUT=0`, `ROUTE_CACHE_TTL=-1`) fail fast at startup with a clear message.
 
 ## Running Django
 
@@ -83,9 +85,14 @@ curl http://127.0.0.1:8000/api/v1/health/
 ```bash
 cd backend
 pytest                   # test suite (uses in-memory SQLite and fixed test settings)
+pytest tests/test_routing_api.py tests/test_routing_locations.py   # routing only
 ruff check .             # lint
 ruff format --check .    # formatting
 ```
+
+The suite never touches the network: sockets are blocked in `tests/conftest.py`, and OSRM is
+replaced with `httpx.MockTransport`. Passing tests therefore say nothing about whether the live
+routing server is reachable — check that with the curl examples below against `runserver`.
 
 ## Fuel data
 
@@ -125,8 +132,100 @@ from route candidates. Details: [docs/architecture.md](docs/architecture.md#fuel
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/health/` | Liveness check. No database or external calls. |
+| POST | `/api/v1/routes/` | Driving route between two US locations (M2). |
 
 Errors use one envelope: `{"error": {"code": "...", "message": "...", "details": ...}}`.
+
+### `POST /api/v1/routes/`
+
+`start` and `finish` each accept either form (they can be mixed):
+
+```jsonc
+{"start": "Dallas, TX", "finish": "Atlanta, Georgia"}                  // "City, ST" or "City, State"
+{"start": {"latitude": 32.7767, "longitude": -96.7970},
+ "finish": {"latitude": 33.7490, "longitude": -84.3880}}               // WGS84 decimal degrees
+```
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/v1/routes/ \
+  -H "Content-Type: application/json" \
+  -d '{"start": "Dallas, TX", "finish": "Atlanta, GA"}'
+
+curl -s -X POST http://127.0.0.1:8000/api/v1/routes/ \
+  -H "Content-Type: application/json" \
+  -d '{"start": {"latitude": 32.7767, "longitude": -96.797}, "finish": {"latitude": 33.749, "longitude": -84.388}}'
+```
+
+Response (`200`). Distance and duration below are what the public OSRM server returned for this
+pair on 2026-10-21; the geometry is shortened here — the real one has the full road path:
+
+```json
+{
+  "origin":      {"label": "Dallas, TX", "latitude": 32.794176, "longitude": -96.765503, "state": "TX", "source": "census_place"},
+  "destination": {"label": "Atlanta, GA", "latitude": 33.762909, "longitude": -84.422675, "state": "GA", "source": "census_place"},
+  "route": {
+    "distance_miles": 782.58,
+    "duration_minutes": 848.4,
+    "geometry": {"type": "LineString", "coordinates": [[-96.765503, 32.794176], "…", [-84.422675, 33.762909]]}
+  },
+  "meta": {
+    "provider": "osrm",
+    "attribution": "Routing © OSRM; map data © OpenStreetMap contributors (ODbL)",
+    "cached": false,
+    "routing_requests": 1
+  }
+}
+```
+
+* `geometry` is a GeoJSON `LineString` (`[longitude, latitude]` pairs, full resolution) — pass it
+  straight to MapLibre/Leaflet. `distance_miles` = provider metres ÷ 1609.344, rounded to 0.01.
+* City inputs resolve to the Census *internal point* of the place, so a city's coordinates are
+  near its centre, not at a specific address. Coordinate inputs are used as given.
+* `meta.routing_requests` is the number of external routing calls this response needed: `1` on a
+  cache miss, `0` on a hit. Location resolution never calls the network.
+
+**Errors**
+
+| Status | `code` | When |
+|--------|--------|------|
+| 400 | `invalid` | Missing `start`/`finish`, wrong type, blank, not `"City, ST"`, latitude/longitude out of range or not a number (`details` is per field) |
+| 400 | `parse_error` | Body is not valid JSON |
+| 415 | `unsupported_media_type` | Body is not `application/json` |
+| 405 | `method_not_allowed` | Anything other than `POST` |
+| 422 | `location_not_found` | Unknown US state, or no Census place with that name in the state |
+| 422 | `ambiguous_location` | Several Census places in that state share the name; `details.candidates` lists them — send coordinates instead |
+| 422 | `location_outside_us` | Coordinates outside the 50 states + DC, or a Canadian province / US territory |
+| 422 | `same_location` | Start and finish resolve to the same point |
+| 422 | `route_not_found` | The provider found no drivable route (e.g. Hawaii ↔ mainland) |
+| 502 | `routing_provider_error` | The provider rejected the request or sent an invalid response |
+| 503 | `routing_unavailable` | Provider unreachable, rate limiting (429) or failing (5xx) |
+| 504 | `routing_timeout` | No provider response within `ROUTING_TIMEOUT` |
+
+For 422 location errors, `details.field` says which input failed (`start` is checked first).
+
+```json
+{"error": {"code": "ambiguous_location",
+           "message": "'Cottonwood, AZ' matches 2 Census places. Send coordinates instead.",
+           "details": {"field": "finish", "city": "Cottonwood", "state": "AZ",
+                       "candidates": [{"name": "Cottonwood CDP", "latitude": 36.072383, "longitude": -109.890236},
+                                      {"name": "Cottonwood city", "latitude": 34.719747, "longitude": -112.001252}]}}}
+```
+
+### Routing provider, calls and caching
+
+* **Provider:** OSRM HTTP API (`/route/v1/driving/…?overview=full&geometries=geojson`), default
+  the public demo server. Its [usage policy](https://map.project-osrm.org/about.html) allows at
+  most one request per second, forbids heavy use and requires an identifying User-Agent and
+  attribution (returned in `meta.attribution`). Use your own OSRM for anything beyond a demo:
+  set `ROUTING_BASE_URL`.
+* **Calls:** one HTTP request per uncached route, no retries, no per-station calls. Location
+  resolution is offline. So a request costs exactly one external network call on a cache miss
+  and none on a hit.
+* **Cache:** successful routes are stored in Django's database cache (table `routefuel_cache`
+  in the same SQLite file, created by `migrate`) for `ROUTE_CACHE_TTL` seconds. The key is the
+  provider + server + coordinates rounded to 5 decimals (~1 m), direction-sensitive, so
+  `"Dallas, TX"`, `"dallas, texas"` and the same coordinates share one entry. Errors are never
+  cached. If the cache table is unavailable the request still succeeds, just uncached.
 
 ## Project structure
 
@@ -136,12 +235,12 @@ routefuel/
 │   ├── config/             settings, test settings, root URLs, WSGI/ASGI
 │   ├── apps/
 │   │   ├── core/           health endpoint, error envelope
-│   │   ├── routing/        location resolution & OSRM (M2)
+│   │   ├── routing/        location resolution, OSRM client, route cache, /routes/ (M2)
 │   │   ├── fuel/           FuelStation model, CSV importer, offline geolocation,
 │   │   │                   bounding-box station queries, management commands
 │   │   └── optimization/   fuel-stop optimiser (M3)
 │   ├── tests/              pytest suite
-│   ├── data/               fuel-price CSV; reference/ Census gazetteer
+│   ├── data/               fuel-price CSV; reference/ Census gazetteer + US state polygons
 │   ├── manage.py
 │   ├── requirements.txt    runtime dependencies
 │   ├── requirements-dev.txt

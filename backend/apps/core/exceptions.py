@@ -10,6 +10,16 @@ from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
 
+class ApiError(APIException):
+    """An API error with a specific status, machine-readable code and optional details."""
+
+    def __init__(self, *, status_code: int, code: str, message: str, details: Any = None) -> None:
+        self.status_code = status_code
+        self.default_code = code
+        self.details = details
+        super().__init__(detail=message, code=code)
+
+
 def api_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     """Wrap DRF error responses as ``{"error": {"code", "message", "details"}}``.
 
@@ -29,7 +39,7 @@ def api_exception_handler(exc: Exception, context: dict[str, Any]) -> Response |
     data = response.data
     if isinstance(data, dict) and set(data) == {"detail"}:
         message = str(data["detail"])
-        details = None
+        details = getattr(exc, "details", None)
     else:
         message = "The request could not be processed."
         details = data

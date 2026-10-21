@@ -109,6 +109,7 @@ class MatchStatus(StrEnum):
 class Match:
     status: MatchStatus
     place: Place | None = None
+    candidates: tuple[Place, ...] = ()  # the competing places when ambiguous
 
 
 class Gazetteer:
@@ -174,7 +175,7 @@ class Gazetteer:
             if len(places) == 1:
                 return Match(MatchStatus.MATCHED, places[0])
             if len(places) > 1:
-                return Match(MatchStatus.AMBIGUOUS)
+                return Match(MatchStatus.AMBIGUOUS, candidates=tuple(places))
         return Match(MatchStatus.NOT_FOUND)
 
 

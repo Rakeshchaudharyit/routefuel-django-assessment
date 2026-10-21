@@ -38,7 +38,7 @@ That is the right size for a three-day assessment and still reads as a real code
 (route length, stations with mile markers and prices) and returns a plan. That makes it
 fast to unit-test against hand-calculated answers.
 
-### Request flow (target for M2–M4)
+### Request flow (steps 1–3 built in M2; 4–6 are M3–M4)
 
 1. Validate input (US locations, start ≠ finish).
 2. Resolve start/finish to coordinates — from an offline US place index where possible, so no
@@ -67,9 +67,11 @@ Every DRF-handled error returns:
 {"error": {"code": "method_not_allowed", "message": "Method \"POST\" not allowed.", "details": null}}
 ```
 
-`details` carries field-level validation errors when present. Routing-provider failures
-(M2) will map to explicit codes (e.g. `route_not_found`, `routing_unavailable`) rather than
-leaking provider responses.
+`details` carries field-level validation errors when present. Domain errors are raised as
+`apps.core.exceptions.ApiError(status_code, code, message, details)`, which the same handler
+renders, so location and routing failures use explicit codes (`ambiguous_location`,
+`route_not_found`, `routing_unavailable`, …) and never leak provider responses. The full table
+is in the README.
 
 ## Fuel data layer (M1)
 
@@ -213,6 +215,120 @@ Planned M3 matching (not implemented):
 
 No per-station routing calls are made.
 
+## Routing layer (M2)
+
+### Modules (`apps/routing`)
+
+| Module | Responsibility |
+|--------|----------------|
+| `serializers.py` | Request shape only: each of `start`/`finish` is `"City, ST"` or `{latitude, longitude}`; ranges, types, blank/format checks. No lookups. |
+| `locations.py` | Offline resolution to a `ResolvedLocation` (label, lat, lng, state, source). Raises `LocationError(code, message, details)`. |
+| `geography.py` | State codes/names; `UsBoundary` point-in-polygon over the 50 states + DC. |
+| `providers.py` | `RoutingProvider` protocol, `OsrmProvider` (one HTTP call, normalised to `Route`), routing error classes with their HTTP status and code. |
+| `services.py` | `plan_route()`: resolve both ends → reject identical points → cache lookup → one provider call → cache store. |
+| `views.py` | `POST /api/v1/routes/`; maps domain errors to `ApiError`; builds the response. |
+
+The view, service and cache know only `RoutingProvider.route(origin, destination) -> Route`.
+Replacing OSRM (Valhalla, GraphHopper, a self-hosted server) means adding one class in
+`providers.py` and returning it from `get_routing_provider()`.
+
+### Location resolution
+
+* **City/state** reuses the M1 Census places gazetteer and its matcher (`Gazetteer.lookup`),
+  so stations and route endpoints are placed by the same rules. Full state names are accepted.
+  A name shared by two places in one state (157 such names in the 2010 file, e.g. *Cottonwood
+  city* and *Cottonwood CDP* in AZ) is rejected with the candidates listed; nothing is guessed.
+  The only M1 change is additive: `Match` now carries `candidates` for ambiguous matches.
+  Spot check: 72 of 73 large US cities resolve; *Honolulu* does not, because the Census calls
+  the place *Urban Honolulu CDP* (and Hawaii has no road link to the mainland anyway).
+* **Coordinates** must be inside a state or DC polygon from Natural Earth 1:10m (public domain,
+  1.1 MB, see `data/reference/SOURCE.md`). This is a real point-in-polygon test (even-odd ray
+  casting with per-polygon bounding boxes, pure Python, ~0.1 ms per point), not a bounding box:
+  Windsor ON, Nogales (Sonora), Tijuana, the Gulf of Mexico and Puerto Rico are rejected while
+  Detroit, Nogales AZ, Key West, Alaska and Hawaii are accepted (all covered by tests).
+  **Limitation:** at 1:10m, borders and coasts are generalised by up to roughly 1 km, so points
+  within about a kilometre of a coast or international border may be misclassified. A Census
+  TIGER/cartographic-boundary file would tighten this; it was not reachable from the build
+  environment.
+* **Scope:** the 50 states + DC (the fuel data's scope). Canadian provinces and US territories
+  get `location_outside_us`. Alaska is accepted; its routes leave the US through Canada.
+* Both data files load once per process, at server start (`config/wsgi.py`, `config/asgi.py`):
+  ~0.25 s for the gazetteer and ~0.06 s for the polygons. Tests and management commands load
+  them lazily.
+
+### Provider: OSRM
+
+Checked on 2026-10-21. The public server `router.project-osrm.org`
+([about/usage policy](https://map.project-osrm.org/about.html),
+[API usage policy wiki](https://github.com/Project-OSRM/osrm-backend/wiki/API%20Usage%20Policy)):
+**at most 1 request per second, no scraping or heavy use, a valid identifying User-Agent, and
+attribution** (OSRM + OpenStreetMap/ODbL); no quality or availability guarantee. That fits a
+demo; production use needs a self-hosted OSRM or a paid provider (`ROUTING_BASE_URL`).
+
+Request: `GET /route/v1/driving/{lng},{lat};{lng},{lat}?overview=full&geometries=geojson&steps=false&alternatives=false&annotations=false`
+— distance (metres), duration (seconds) and the full GeoJSON road geometry in one response.
+
+| Provider outcome | API result |
+|------------------|------------|
+| `200`, `code: "Ok"`, valid route | `200` |
+| `NoRoute`, `NoSegment` (HTTP 400) | `422 route_not_found` |
+| timeout (connect ≤ 5 s, read `ROUTING_TIMEOUT`) | `504 routing_timeout` |
+| connection error, HTTP 429, HTTP 5xx | `503 routing_unavailable` |
+| other 4xx, invalid JSON, missing/invalid distance, duration or geometry | `502 routing_provider_error` |
+
+There are no retries: against a 1 req/s demo server, an immediate retry is more likely to be
+rate-limited than to succeed, and it doubles the worst-case latency. The response is validated
+strictly (finite, non-negative numbers; a `LineString` of ≥ 2 in-range `[lng, lat]` pairs) and
+no route is ever fabricated. One pooled `httpx.Client` per process: creating a client costs
+~48 ms (CA bundle load, measured), and keep-alive avoids repeat TLS handshakes.
+
+Distance is converted with the exact international mile (1 mi = 1609.344 m) and rounded to
+0.01 mi only in the response; durations are seconds ÷ 60, rounded to 0.1 min.
+
+### Cache
+
+* Backend: Django `DatabaseCache`, table `routefuel_cache` in the same SQLite file, created by the
+  `routing.0001_route_cache_table` migration (`createcachetable`, idempotent). No Redis.
+  Persists across restarts; `MAX_ENTRIES` 5000 with Django's cull.
+* Key: `route:v1:` + SHA-256 of provider name, server URL, profile and both endpoints rounded
+  to 5 decimals (~1.1 m). Direction-sensitive (A→B ≠ B→A, one-way roads differ).
+* Value: plain dict (distance m, duration s, geometry, provider) — not a pickled class, so
+  code changes can't break old entries; an unreadable entry is treated as a miss.
+* TTL `ROUTE_CACHE_TTL` (default 7 days): road networks change slowly, and the demo server's
+  rate limit makes reuse valuable. Failures are never cached.
+* Cache read/write errors (e.g. table missing) are logged and the request continues uncached.
+* Not handled: concurrent identical cache misses each call the provider (no request
+  coalescing). Acceptable at assessment scale.
+* Tests use `LocMemCache`, cleared around every routing test.
+
+### Measured performance (local only)
+
+Measured 2026-10-21 in the build container: Django `runserver` (`DEBUG=false`), SQLite with
+the database cache, and a **local stub HTTP server standing in for OSRM** (instant responses,
+synthetic straight-line geometry of the stated size). These numbers are RouteFuel's own
+overhead; they contain **no real network or OSRM time**. Median of 10 distinct city pairs, via
+`curl` on the same machine:
+
+| Geometry points (≈ payload) | Uncached | Cached |
+|-----------------------------|---------:|-------:|
+| 3 (1 KiB) | 5.5 ms | 2.2 ms |
+| 10,000 (226 KiB) | 39.0 ms | 13.1 ms |
+| 50,000 (1.1 MiB) | 200.4 ms | 71.6 ms |
+
+Every run made exactly one stub request per uncached route and none for cached ones (11 = 1
+warm-up + 10). Reusing one HTTP client cut the small-payload uncached time from 46.6 ms to
+4.6 ms; preloading reference data at startup cut the first request after start from ~330 ms to
+~70 ms.
+
+Live OSRM could not be called from the build machine or the linked computer (both sit behind
+an egress allowlist that blocks the host). It was queried through a separate web fetch tool:
+Dallas, TX → Atlanta, GA returned `code: "Ok"`, 1,259,435.7 m (782.58 mi), 50,903.2 s, and a
+GeoJSON `LineString` starting `[-96.796754, 32.775944]`; New York → Los Angeles returned
+4,496,847.5 m (2,794.21 mi), 179,302.1 s. That confirms the request format and response shape
+the client expects, but **the Django client itself has not yet made a live call**, and
+real-geometry size and live latency are unmeasured. Large payloads are the main cost; gzip or
+a simplified display geometry are M4 options.
+
 ## Technical considerations for later milestones
 
 Recorded in M0; item 1 was addressed in M1, the rest are for M2–M4.
@@ -233,7 +349,7 @@ Recorded in M0; item 1 was addressed in M1, the rest are for M2–M4.
    paid-for fuel left. Total expenditure is then the sum of all purchases (≈ route miles ÷ 10 gal
    at the prices paid). Both assumptions will be returned in the response so the number is
    never ambiguous.
-6. **One routing call per uncached route.** Cache by rounded start/finish coordinates.
+6. **One routing call per uncached route.** Done in M2 — see [Routing layer](#routing-layer-m2).
 7. **No per-station routing calls.** Off-route distance is a geometric approximation along the
    polyline, which is accurate enough for selecting highway-adjacent stops.
 8. **Preprocess once, query cheaply.** Clean and geolocate the CSV at import time; index
