@@ -11,6 +11,7 @@ os.environ["ROUTING_BASE_URL"] = "https://router.example.test"
 os.environ["ROUTING_TIMEOUT"] = "5"
 os.environ["ROUTING_USER_AGENT"] = "RouteFuel-tests/1.0"
 os.environ["ROUTE_CACHE_TTL"] = "3600"
+os.environ["FUEL_CORRIDOR_MILES"] = "5"
 
 from config.settings import *  # noqa: E402, F403
 

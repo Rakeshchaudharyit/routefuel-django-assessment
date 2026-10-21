@@ -7,8 +7,8 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 | M0 | Django Foundation | Claude | ✅ |
 | M1 | Fuel Data Processing & Station Geolocation | Claude | ✅ |
 | M2 | Routing API Integration | Claude | ✅ (live call from Django pending) |
-| M3 | Fuel Optimization Engine | Claude | ⏳ |
-| M4 | API Validation & Performance | Claude | ⬜ |
+| M3 | Fuel Optimization Engine | Claude | ✅ (live call from Django pending) |
+| M4 | API Validation & Performance | Claude | ⏳ |
 | M5 | Professional SaaS Dashboard | Codex | ⬜ |
 | M6 | Interactive Map & API Integration | Codex | ⬜ |
 | M7 | Testing & Independent Code Review | Claude + Codex | ⬜ |
@@ -86,9 +86,37 @@ response or live on a separate `route-plan` endpoint.
 
 **Done when:** results match hand-worked examples and the algorithm is provably no worse than greedy-cheapest.
 
+**Built:**
+
+- `POST /api/v1/routes/optimize/` with optional `vehicle` (`range_miles`, `mpg`,
+  `starting_fuel_gallons` default full, `starting_fuel_price_per_gallon` optional).
+- `optimization/geometry.py`: haversine cumulative distance, mile markers scaled to the provider
+  distance, thinned matching line, grid index, station offset and route mile.
+- Corridor: one indexed query over padded ~200-mile route boxes; keep stations within
+  5 mi + their location uncertainty; unresolved stations excluded.
+- `optimization/optimizer.py`: "fill up, refund later" (classical fixed-route optimal rule),
+  explicit infeasibility with the failing gap, and a replay check on every plan.
+- Response: stops with price, gallons, cost, fuel on arrival/departure, route mile and
+  approximate-location metadata; summary separating fuel consumed, starting fuel used,
+  fuel purchased, purchase cost, remaining fuel, and (only with a supplied price) starting-fuel
+  value and estimated total. Decimal money, rounded per stop, totals = sum of lines.
+- M2 `/routes/` unchanged; shared route cache.
+
+**Verified (2026-10-21):** 358 tests pass (261 before M3 + 97 new); the optimiser matches an
+independent DP solver on 11,000 random instances; `check`, `makemigrations --check`, Ruff clean.
+Benchmarks with the real station DB and stand-in routes: optimiser < 1 ms; full request
+13–96 ms in-process (2.5k–42k route points), 66–203 ms over HTTP; exactly one provider call per
+uncached route, none cached (details in [architecture.md](architecture.md#performance-measured-locally-2026-10-21)).
+
+**Not yet verified:** a real OSRM route through Django (egress blocked in the build
+environment), so real-route stop choices and live latency are unmeasured.
+
+**For review:** starting-fuel convention (full tank, purchases reported separately), the 5-mile
+corridor, and whether small cost-saving top-ups should be suppressed by a per-stop cost.
+
 ## M4 — API Validation & Performance
 
-- Final request/response contract (extend `POST /api/v1/routes/` or add `route-plan/`).
+- Final request/response contract (M3 added `POST /api/v1/routes/optimize/` alongside `/routes/`).
 - Response size: gzip and/or a simplified display geometry for long routes.
 - Input validation with field-level errors.
 - Query efficiency (indexed bounding-box prefilter), timing measurements, caching.

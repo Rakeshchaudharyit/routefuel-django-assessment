@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from rest_framework import serializers
@@ -72,3 +73,103 @@ class LocationField(serializers.Field):
 class RouteRequestSerializer(serializers.Serializer):
     start = LocationField()
     finish = LocationField()
+
+
+DEFAULT_RANGE_MILES = 500.0
+DEFAULT_MPG = 10.0
+MAX_RANGE_MILES = 5000.0
+MAX_MPG = 200.0
+MIN_FUEL_PRICE = Decimal("0.50")
+MAX_FUEL_PRICE = Decimal("20.00")
+_VEHICLE_KEYS = {"range_miles", "mpg", "starting_fuel_gallons", "starting_fuel_price_per_gallon"}
+
+
+def _strict_number(value: Any, name: str, errors: dict[str, list[str]]) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        errors[name] = ["A number is required."]
+        return None
+    return float(value)
+
+
+class VehicleField(serializers.Field):
+    """Optional vehicle settings; omitted values take the assessment defaults."""
+
+    default_error_messages = {"type": "Expected an object."}
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            self.fail("type")
+        errors: dict[str, list[str]] = {}
+        unknown = sorted(set(data) - _VEHICLE_KEYS)
+        if unknown:
+            errors["non_field_errors"] = [f"Unexpected keys: {', '.join(unknown)}."]
+
+        range_miles = DEFAULT_RANGE_MILES
+        mpg = DEFAULT_MPG
+        if "range_miles" in data:
+            value = _strict_number(data["range_miles"], "range_miles", errors)
+            if value is not None and not 0 < value <= MAX_RANGE_MILES:
+                errors["range_miles"] = [f"Must be greater than 0 and at most {MAX_RANGE_MILES:g}."]
+            elif value is not None:
+                range_miles = value
+        if "mpg" in data:
+            value = _strict_number(data["mpg"], "mpg", errors)
+            if value is not None and not 0 < value <= MAX_MPG:
+                errors["mpg"] = [f"Must be greater than 0 and at most {MAX_MPG:g}."]
+            elif value is not None:
+                mpg = value
+
+        capacity = range_miles / mpg
+        starting_fuel = capacity
+        if "starting_fuel_gallons" in data:
+            value = _strict_number(data["starting_fuel_gallons"], "starting_fuel_gallons", errors)
+            if value is not None and not 0 <= value <= capacity + 1e-9:
+                errors["starting_fuel_gallons"] = [
+                    f"Must be between 0 and the tank capacity ({capacity:g} gallons = "
+                    "range_miles / mpg)."
+                ]
+            elif value is not None:
+                starting_fuel = min(value, capacity)
+
+        starting_price = None
+        if data.get("starting_fuel_price_per_gallon") is not None:
+            starting_price = self._price(data["starting_fuel_price_per_gallon"], errors)
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return {
+            "range_miles": range_miles,
+            "mpg": mpg,
+            "starting_fuel_gallons": starting_fuel,
+            "starting_fuel_price_per_gallon": starting_price,
+        }
+
+    def to_representation(self, value: Any) -> Any:
+        return value
+
+    @staticmethod
+    def _price(value: Any, errors: dict[str, list[str]]) -> Decimal | None:
+        key = "starting_fuel_price_per_gallon"
+        if isinstance(value, bool) or not isinstance(value, int | float | str):
+            errors[key] = ["A number or decimal string is required."]
+            return None
+        try:
+            price = Decimal(str(value).strip())
+        except InvalidOperation:
+            errors[key] = ["A number or decimal string is required."]
+            return None
+        if not price.is_finite() or not MIN_FUEL_PRICE <= price <= MAX_FUEL_PRICE:
+            errors[key] = [f"Must be between {MIN_FUEL_PRICE} and {MAX_FUEL_PRICE} USD."]
+            return None
+        if -price.as_tuple().exponent > 8:
+            errors[key] = ["Use at most 8 decimal places."]
+            return None
+        return price
+
+
+class OptimizeRequestSerializer(RouteRequestSerializer):
+    vehicle = VehicleField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs.setdefault("vehicle", VehicleField().to_internal_value({}))
+        return attrs

@@ -4,8 +4,9 @@ A Django REST API that plans a driving route between two US locations and recomm
 buy fuel so the trip costs as little as possible. Built as the backend assessment for the
 Backend Django Engineer role at Spotter AI.
 
-> **Status:** M0 (foundation), M1 (fuel data) and M2 (routing) complete. Fuel-stop optimisation
-> arrives in M3 — see [docs/milestones.md](docs/milestones.md).
+> **Status:** M0 (foundation), M1 (fuel data), M2 (routing) and M3 (fuel-stop optimisation)
+> implemented. M2/M3 have not yet been run against the live OSRM server from Django (blocked
+> in the build environment) — see [docs/milestones.md](docs/milestones.md).
 
 ## Assessment requirements
 
@@ -67,6 +68,7 @@ Real environment variables take precedence over `.env`.
 | `ROUTING_TIMEOUT` | `10` | Routing request timeout in seconds (must be > 0; connect capped at 5) |
 | `ROUTING_USER_AGENT` | `RouteFuel/0.2 (Spotter AI assessment; …)` | User-Agent sent to the routing server (required by the OSRM usage policy) |
 | `ROUTE_CACHE_TTL` | `604800` (7 days) | Seconds a successful route stays cached (must be > 0) |
+| `FUEL_CORRIDOR_MILES` | `5` | A station is a candidate if its point is within this distance of the route **plus** its own location uncertainty (must be > 0) |
 
 Invalid values (e.g. `DJANGO_DEBUG=maybe`, `ROUTING_TIMEOUT=0`, `ROUTE_CACHE_TTL=-1`) fail fast at startup with a clear message.
 
@@ -133,6 +135,7 @@ from route candidates. Details: [docs/architecture.md](docs/architecture.md#fuel
 |--------|------|-------------|
 | GET | `/api/v1/health/` | Liveness check. No database or external calls. |
 | POST | `/api/v1/routes/` | Driving route between two US locations (M2). |
+| POST | `/api/v1/routes/optimize/` | Route plus minimum-cost fuel stops (M3). |
 
 Errors use one envelope: `{"error": {"code": "...", "message": "...", "details": ...}}`.
 
@@ -227,6 +230,100 @@ For 422 location errors, `details.field` says which input failed (`start` is che
   `"Dallas, TX"`, `"dallas, texas"` and the same coordinates share one entry. Errors are never
   cached. If the cache table is unavailable the request still succeeds, just uncached.
 
+### `POST /api/v1/routes/optimize/`
+
+Same `start`/`finish` as `/routes/`, plus an optional `vehicle` (all fields optional):
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `range_miles` | `500` | Distance on a full tank |
+| `mpg` | `10` | Miles per gallon. Tank capacity = `range_miles / mpg` (50 gal) |
+| `starting_fuel_gallons` | full tank (50) | Fuel on board at the origin, already paid for |
+| `starting_fuel_price_per_gallon` | none | Optional. Only used to value the starting fuel; never invented |
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/v1/routes/optimize/ \
+  -H "Content-Type: application/json" \
+  -d '{"start": "Dallas, TX", "finish": "Atlanta, GA",
+       "vehicle": {"range_miles": 500, "mpg": 10, "starting_fuel_gallons": 50,
+                   "starting_fuel_price_per_gallon": "3.199"}}'
+```
+
+Response (`200`), abridged. **This example was produced locally with the real station database
+but a stand-in route** (straight segments through the Census points of I-20 towns, with the
+778.8-mile distance the public OSRM server reported for this pair) because OSRM was unreachable
+from the build machine. A real OSRM route will give different mile markers and may choose
+different stations:
+
+```json
+{
+  "origin": {"label": "Dallas, TX", "...": "..."},
+  "destination": {"label": "Atlanta, GA", "...": "..."},
+  "route": {"distance_miles": 778.8, "duration_minutes": 0.0, "geometry": {"type": "LineString", "coordinates": ["..."]}},
+  "vehicle": {"range_miles": 500.0, "mpg": 10.0, "tank_capacity_gallons": "50.000",
+              "starting_fuel_gallons": "50.000", "starting_fuel_price_per_gallon": "3.199"},
+  "fuel_plan": {
+    "currency": "USD",
+    "stops": [
+      {"sequence": 1,
+       "station": {"opis_id": 60540, "name": "CIRCLE K #2706340", "address": "I-20, EXIT 533",
+                   "city": "Canton", "state": "TX", "latitude": 32.554245, "longitude": -95.863534},
+       "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
+                    "uncertainty_miles": 1.4, "distance_from_route_miles": 3.6},
+       "route_mile": 56.9, "price_per_gallon": "2.77566666", "gallons": "5.685", "cost": "15.78",
+       "fuel_on_arrival_gallons": "44.315", "fuel_on_departure_gallons": "50.000"},
+      {"sequence": 2,
+       "station": {"opis_id": 64558, "name": "MR FUEL #1203", "address": "I-20, EXIT 129",
+                   "city": "Meridian", "state": "MS", "latitude": 32.384191, "longitude": -88.68944},
+       "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
+                    "uncertainty_miles": 4.1, "distance_from_route_miles": 0.07},
+       "route_mile": 496.3, "price_per_gallon": "2.81233333", "gallons": "22.195", "cost": "62.42",
+       "fuel_on_arrival_gallons": "6.055", "fuel_on_departure_gallons": "28.250"}
+    ],
+    "summary": {
+      "number_of_stops": 2,
+      "total_gallons_consumed": "77.880",
+      "starting_fuel_used_gallons": "50.000",
+      "total_gallons_purchased": "27.880",
+      "total_purchase_cost": "78.20",
+      "fuel_remaining_at_destination_gallons": "0.000",
+      "starting_fuel_value": "159.95",
+      "estimated_total_fuel_cost": "238.15"
+    },
+    "candidates": {"corridor_miles": 5.0, "stations_in_search_area": 242, "stations_on_route": 111}
+  },
+  "meta": {"provider": "osrm", "attribution": "…", "cached": false, "routing_requests": 1,
+           "timings_ms": {"route": 95.82, "station_matching": 20.25, "optimization": 0.33}}
+}
+```
+
+**Reading the numbers**
+
+* `total_gallons_consumed` = route miles ÷ mpg (778.8 ÷ 10 = 77.88).
+* Starting fuel is used first (it is already paid for): `starting_fuel_used_gallons` =
+  min(starting fuel, consumed); `total_gallons_purchased` = consumed − starting fuel used.
+* `cost` per stop = `price_per_gallon` × `gallons` (gallons rounded to 0.001), rounded half-up to
+  the cent. `total_purchase_cost` is the sum of the stop costs, so the lines add up exactly.
+* `total_purchase_cost` is money spent at the recommended stops only. The starting tank is not
+  free, but its price is unknown, so `starting_fuel_value` and `estimated_total_fuel_cost`
+  (= purchases + starting fuel used × `starting_fuel_price_per_gallon`) are `null` unless that
+  price is supplied.
+* Money and gallons are decimal strings (`"78.20"`, `"27.880"`); prices keep the CSV's
+  precision (up to 8 decimals, at least 3). Miles and coordinates are numbers.
+* Station positions are **town-level approximations** (`location.approximate: true`). Road access
+  and detour distance to the actual pump are not checked; `distance_from_route_miles` is the
+  straight-line distance from the town point to the route.
+
+**Additional errors**
+
+| Status | `code` | When |
+|--------|--------|------|
+| 400 | `invalid` | `vehicle` not an object, unknown key, non-numeric or out-of-range value, starting fuel above tank capacity, starting price outside $0.50–$20.00 |
+| 422 | `no_feasible_fuel_plan` | Some stretch is longer than the vehicle can drive: `details` gives `from_mile`, `to_mile`, `gap_miles`, `max_reach_miles` |
+
+All `/routes/` errors apply too. A plan is only returned after it has been replayed mile by
+mile and checked (tank never below 0 or above capacity, stops in route order).
+
 ## Project structure
 
 ```
@@ -235,10 +332,11 @@ routefuel/
 │   ├── config/             settings, test settings, root URLs, WSGI/ASGI
 │   ├── apps/
 │   │   ├── core/           health endpoint, error envelope
-│   │   ├── routing/        location resolution, OSRM client, route cache, /routes/ (M2)
+│   │   ├── routing/        location resolution, OSRM client, route cache, /routes/ (M2),
+│   │   │                   /routes/optimize/ and fuel-plan assembly (M3)
 │   │   ├── fuel/           FuelStation model, CSV importer, offline geolocation,
 │   │   │                   bounding-box station queries, management commands
-│   │   └── optimization/   fuel-stop optimiser (M3)
+│   │   └── optimization/   route geometry + fuel optimiser, pure Python (M3)
 │   ├── tests/              pytest suite
 │   ├── data/               fuel-price CSV; reference/ Census gazetteer + US state polygons
 │   ├── manage.py

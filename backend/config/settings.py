@@ -199,6 +199,14 @@ if not ROUTING_USER_AGENT:
 ROUTE_CACHE_TTL = env_int("ROUTE_CACHE_TTL", default=7 * 24 * 60 * 60)
 
 # --------------------------------------------------------------------------
+# Fuel-stop optimisation (M3)
+# --------------------------------------------------------------------------
+
+# A station counts as "on the route" when its point is within this distance of the route line,
+# plus the station's own location uncertainty (M1 city-level points mark the town, not the pump).
+FUEL_CORRIDOR_MILES = env_float("FUEL_CORRIDOR_MILES", default=5.0)
+
+# --------------------------------------------------------------------------
 # Fuel data (M1). Files live in the repository; nothing is fetched at runtime.
 # --------------------------------------------------------------------------
 

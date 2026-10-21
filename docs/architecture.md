@@ -38,7 +38,7 @@ That is the right size for a three-day assessment and still reads as a real code
 (route length, stations with mile markers and prices) and returns a plan. That makes it
 fast to unit-test against hand-calculated answers.
 
-### Request flow (steps 1–3 built in M2; 4–6 are M3–M4)
+### Request flow (steps 1–3 built in M2, 4–6 in M3)
 
 1. Validate input (US locations, start ≠ finish).
 2. Resolve start/finish to coordinates — from an offline US place index where possible, so no
@@ -329,28 +329,206 @@ the client expects, but **the Django client itself has not yet made a live call*
 real-geometry size and live latency are unmeasured. Large payloads are the main cost; gzip or
 a simplified display geometry are M4 options.
 
+## Fuel-stop optimisation (M3)
+
+`POST /api/v1/routes/optimize/` = M2 route (same cache, same single provider call) → stations
+near the route (one indexed query + local geometry) → optimiser → replay check → response.
+
+| Module | Responsibility |
+|--------|----------------|
+| `optimization/geometry.py` | `RouteLine`: cumulative haversine distance, thinned matching line, grid index, `locate()` → route mile + offset. Pure Python. |
+| `optimization/optimizer.py` | `Vehicle`, `Candidate`, `optimize()`, `check_plan()`, `InfeasiblePlan`. Pure Python. |
+| `routing/fuel_plans.py` | Orchestration: route, station query, placement, optimiser, response money/rounding. |
+| `routing/serializers.py`, `views.py` | `vehicle` validation; `OptimizeRouteView`; shared error mapping (`no_feasible_fuel_plan`). |
+
+### Model and assumptions
+
+| Item | Value / rule |
+|------|--------------|
+| Range, efficiency | 500 mi, 10 MPG (request-configurable) |
+| Tank capacity | `range_miles / mpg` = 50 gal |
+| Consumption | Linear: `miles / mpg` gallons for any stretch |
+| Starting fuel | Default **full tank (50 gal)**, configurable 0 – capacity. Already paid for. |
+| Objective | Minimise money spent at stations. Fuel left at the destination has no value in the objective. |
+| Purchases | Any positive quantity at any candidate station, up to the free tank space |
+| Station position | Its projected route mile; detour to/from the station is not modelled |
+| Price | `FuelStation.retail_price` (lowest listed price for that OPIS ID, exact `Decimal`) |
+
+Consequences, reported separately in `fuel_plan.summary`:
+
+1. `total_gallons_consumed` = distance ÷ mpg.
+2. `starting_fuel_used_gallons` = min(starting fuel, consumed) — starting fuel is burnt first
+   because it costs nothing more to use it.
+3. `total_gallons_purchased` = consumed − starting fuel used (the optimiser never buys fuel it
+   does not need, so nothing paid-for is left at the destination).
+4. `total_purchase_cost` = Σ stop costs. Each stop: `price × gallons` (gallons rounded to
+   0.001), rounded half-up to the cent.
+5. `fuel_remaining_at_destination_gallons` = starting fuel − starting fuel used.
+6. `starting_fuel_value` = starting fuel used × `starting_fuel_price_per_gallon`, and
+   `estimated_total_fuel_cost` = (4) + that — **only when the client supplies the price**.
+   Otherwise both are `null`: the starting tank has real value, but its price is unknown, and
+   no price is invented.
+
+With the default full tank, `total_purchase_cost` is *not* the cost of all fuel burnt on the
+trip — the first 50 gallons came from the tank. Clients wanting "fuel cost of the trip" should
+pass a starting price, or `starting_fuel_gallons: 0` (then every gallon is bought on the route
+and purchase cost = trip fuel cost; requires a station at the origin).
+
+### Algorithm: fill up, refund later
+
+Stations are sorted by route mile (then price, then OPIS ID). The tank is a FIFO queue of
+*lots* (price, gallons); the starting fuel is the first lot.
+
+1. Drive to the next station, burning the oldest lots first.
+2. At a station selling at `p`, remove every lot still in the tank that cost more than `p`
+   (it is treated as never bought), then top up to capacity with fuel at `p`.
+3. At the destination, unburnt purchased lots are removed the same way.
+
+A station's purchase is the part of its lot that was actually burnt. Because step 2 always
+removes the dearest fuel, the queue stays sorted from cheapest (oldest) to dearest (newest).
+Unrolled, this is the classical rule for a fixed route: at a station, if a cheaper station is
+within one tank's range, buy only enough to reach the first such station; otherwise fill the
+tank (and burn this fuel until something cheaper appears). That rule is optimal for a fixed
+path with linear consumption and one tank capacity (Khuller, Malekian & Mestre, *To fill or not
+to fill: the gas station problem*, ACM Trans. Algorithms 7(3), 2011). Runtime is O(n log n)
+for the sort plus O(n) for the pass; measured < 1 ms for 260 candidates.
+
+**Feasibility.** On leaving any station the notional tank is full, so the procedure fails only
+where *no* plan can succeed: the starting fuel cannot reach the first station/destination, or
+two consecutive stations (or the last station and the destination) are more than one range
+apart. That gap is returned as `no_feasible_fuel_plan` with its miles. A partial plan is never
+returned.
+
+**Why not simpler rules.** "Nearest station", "cheapest station in range, fill up" and "fill up
+whenever below X" are all suboptimal; `test_cheapest_next_station_is_not_globally_optimal` is a
+concrete counter-example (filling up at the cheapest reachable station costs $250.00; the
+optimum is $247.00). A DP/shortest-path formulation over discretised fuel levels would also be
+exact but costs O(n · levels²) and needs a discretisation choice; the greedy is exact for the
+continuous model.
+
+**Verification.**
+
+* `tests/reference_optimizer.py` is an independent dynamic program over whole-gallon fuel
+  levels. For instances whose legs burn whole gallons it is exact: the problem is an LP with an
+  interval (consecutive-ones) constraint matrix, which is totally unimodular, so an integral
+  optimum exists. The optimiser matches it on 10,000 random instances (`range(20)` seeds × 500,
+  including infeasible ones and repeated prices) and on 1,000 truck-like instances with
+  fractional gallons (tenth-gallon units).
+* `check_plan()` replays every plan before it is returned: stops in route order, tank never
+  below 0 or above capacity, purchases positive, fuel balance closes. A failure raises an
+  internal error (HTTP 500) rather than returning the plan.
+* Hand-worked cases cover routes < 500, = 500, 500–1,000 and > 1,000 miles, equal prices,
+  dear-then-cheap and cheap-then-dear, duplicates at one location, 8-decimal prices, every
+  starting-fuel case, unreachable gaps and stations near the destination.
+
+**Ties and small purchases.** Equal prices: the earlier station's fuel is used first and
+nothing is swapped, so results are deterministic. The objective is purely cost, so the plan can
+include a small top-up when it saves money (the Dallas–Atlanta example buys 5.7 gal at a station
+2–4 cents cheaper than later ones). A per-stop cost or minimum purchase would change the model
+and is not applied.
+
+### Candidate stations
+
+1. **Prefilter (one SQL query).** The route is cut into ~200-mile pieces; each piece's bounding
+   box is padded by `FUEL_CORRIDOR_MILES` + the largest `location_uncertainty_miles` in the
+   table (one aggregate query), and the boxes are OR-ed into one indexed query on
+   `(latitude, longitude)`. Unresolved stations (no coordinates) are excluded by
+   `routable_stations()`. Measured: ~740 rows for New York → Los Angeles instead of ~6,000.
+2. **Placement (in memory).** Each station's point is projected onto the route (`RouteLine.locate`)
+   and kept if its straight-line offset ≤ `FUEL_CORRIDOR_MILES` (5) **+ its own
+   `location_uncertainty_miles`** (median 1.6, max 15.4). Stations sharing a town point are
+   located once. The station's route mile is the projected point's distance along the line.
+3. Price, range and remaining fuel are then handled by the optimiser.
+
+The 5-mile base corridor reflects that city-level points mark the town centre while truck stops
+sit at nearby interstate exits. It is a configurable assumption, not a measured detour.
+
+**Mile markers.** Distances along the polyline use the haversine formula (mean Earth radius
+3,958.76 mi), never raw degree differences. The polyline is a chain of straight segments, so
+its length differs from the provider's road distance; every mile marker is multiplied by
+`provider distance / polyline length`, so the destination is exactly at the provider's
+distance and stop spacing is consistent with the fuel burnt. For matching, the line is thinned
+to vertices ≥ 0.5 mi apart (each keeps its distance along the full line); on highway curves the
+thinned chord stays within ~0.1 mi of the road. A grid index (0.25° cells) limits each lookup to
+nearby segments. The offset uses a local equirectangular projection around the station
+(accurate to well under 1% within the ≤ 20-mile search radius).
+
+### Approximate coordinates — what the response does and does not claim
+
+* Every stop carries `location.accuracy` (`city` for all current data), `source`,
+  `uncertainty_miles` and `approximate: true` unless accuracy is `address`.
+* `latitude`/`longitude` are the **town's** Census point, not the station.
+* `distance_from_route_miles` is town-point-to-route, straight line. Real access distance,
+  exit position and detour fuel are **not** validated; mile markers can be off by up to the
+  uncertainty radius.
+* 398 stations without coordinates can never be recommended.
+
+### Performance (measured locally, 2026-10-21)
+
+Real SQLite station DB (6,228 routable stations) and DB route cache; **OSRM replaced by a local
+stand-in serving synthetic geometries** (straight segments through Census points of towns along
+the interstate, densified to OSRM-like spacing). No real network time is included.
+
+In-process, median of 10 runs of `plan_route_with_fuel` (default truck, full start), at two
+geometry densities (OSRM's full overview is typically the denser one):
+
+| Stand-in route | Points | Candidates (area → on route) | Matching | Optimiser | Total uncached / route cached |
+|---|---:|---|---:|---:|---:|
+| Dallas → Atlanta (I-20), 778.8 mi | 2,505 | 242 → 111 | 10.3 ms | 0.29 ms | 13.2 / 12.6 ms |
+| | 12,534 | 242 → 111 | 17.7 ms | 0.35 ms | 24.1 / 21.5 ms |
+| New York → Los Angeles, 2,794.2 mi | 8,482 | 743 → 261 | 30.5 ms | 0.65 ms | 37.0 / 32.8 ms |
+| | 42,439 | 744 → 261 | 72.6 ms | 0.79 ms | 95.9 / 86.2 ms |
+| Seattle → Miami, 3,100.4 mi | 10,123 | 728 → 215 | 31.7 ms | 0.54 ms | 38.1 / 36.1 ms |
+| | 50,648 | 731 → 215 | 64.5 ms | 0.56 ms | 89.2 / 83.4 ms |
+
+Plans: Dallas → Atlanta 2 stops, 27.880 gal, $78.20; New York → Los Angeles 12 stops,
+229.421 gal, $683.17; Seattle → Miami 14 stops, ~260.04 gal, ~$807.5 (the last digit moves with
+geometry density because mile markers shift by fractions of a mile). "Matching" = building the
+route index + station query + placement.
+
+Over HTTP (`runserver`, `DEBUG=false`, curl, median of 7, stand-in route served over local HTTP):
+
+| Route (points, payload) | Uncached | Cached route |
+|---|---:|---:|
+| Dallas → Atlanta (12,534 pts, 281 KiB) | 66.2 ms | 46.1 ms |
+| New York → Los Angeles (42,439 pts, 968 KiB) | 203.2 ms | 142.2 ms |
+
+Each run made exactly one provider request per uncached route and none when cached (8 stand-in
+requests for 16 API calls). Database work per request: one uncertainty aggregate, one station
+query, plus the cache read (and write on a miss). The remaining cost is mostly parsing,
+caching and serialising the full-resolution geometry — an M4 item (simplified display geometry,
+gzip).
+
+### Known limitations
+
+* Live OSRM has not been called from Django (egress blocked here); all M3 results above use
+  mocked or stand-in routes.
+* Station positions are town-level; detours and exit access are not modelled.
+* Prices are a static snapshot (lowest listed per OPIS ID); no time or availability data.
+* If a route passes a town twice, the station is placed at the closer pass only.
+* Starting-fuel value is reported only when a price is supplied.
+* No per-stop penalty: the plan may include small cost-saving top-ups.
+
 ## Technical considerations for later milestones
 
-Recorded in M0; item 1 was addressed in M1, the rest are for M2–M4.
+Recorded in M0; items 1–7 are now addressed, item 8 remains guidance.
 
 1. **Station coordinates.** Done in M1 — see [Fuel data layer](#fuel-data-layer-m1). The API and
    UI must label city-level positions as approximate.
 2. **Vehicle model.** 500 mi range ÷ 10 MPG ⇒ 50 gal usable tank.
-3. **Inputs to the optimiser.** Remaining fuel, price at each reachable station, and
+3. **Inputs to the optimiser.** Done in M3. Remaining fuel, price at each reachable station, and
    reachability (no gap between consecutive usable stations may exceed 500 mi, including the
    first and last legs). If a gap is too large, the API returns a clear "no feasible plan" error.
-4. **Greedy is wrong.** Always stopping at the nearest or the cheapest station does not minimise
+4. **Greedy is wrong.** Done in M3 (fill up, refund later). Always stopping at the nearest or the cheapest station does not minimise
    cost. The planned algorithm is the standard fixed-route refuelling strategy: at each stop,
    if a cheaper station is reachable within range, buy only enough to reach it; otherwise fill up
    and continue to the cheapest station within range. It runs in O(n log n) for n candidate
    stations and is optimal for a fixed route with linear fuel use.
-5. **Starting fuel and expenditure (to confirm in M3).** Proposed defaults: the truck starts with
-   an empty tank and buys at a station near the origin; it arrives at the destination with no
-   paid-for fuel left. Total expenditure is then the sum of all purchases (≈ route miles ÷ 10 gal
-   at the prices paid). Both assumptions will be returned in the response so the number is
-   never ambiguous.
+5. **Starting fuel and expenditure.** Decided in M3: start with a full tank (configurable),
+   report purchases and starting-fuel use separately, value the starting fuel only when a price
+   is supplied. See [Model and assumptions](#model-and-assumptions).
 6. **One routing call per uncached route.** Done in M2 — see [Routing layer](#routing-layer-m2).
-7. **No per-station routing calls.** Off-route distance is a geometric approximation along the
+7. **No per-station routing calls.** Done in M3. Off-route distance is a geometric approximation along the
    polyline, which is accurate enough for selecting highway-adjacent stops.
 8. **Preprocess once, query cheaply.** Clean and geolocate the CSV at import time; index
    latitude/longitude; keep per-request work to a bounding-box query and in-memory geometry.
