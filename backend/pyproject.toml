@@ -24,6 +24,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S311"]  # pytest asserts; fixed test-only secrets; seeded RNG
+"tests/test_api_integration.py" = ["F811"]  # reuses fixtures imported from test_optimize_api
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "config"]

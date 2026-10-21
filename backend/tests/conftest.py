@@ -22,6 +22,16 @@ def block_network(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     yield
 
 
+@pytest.fixture(autouse=True)
+def fresh_route_memos() -> Iterator[None]:
+    """Per-process route/station reuse must never leak between tests."""
+    from apps.routing.fuel_plans import clear_memos
+
+    clear_memos()
+    yield
+    clear_memos()
+
+
 @pytest.fixture
 def sample_csv() -> Path:
     return FIXTURES / "fuel_prices_sample.csv"

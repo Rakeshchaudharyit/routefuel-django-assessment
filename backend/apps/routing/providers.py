@@ -8,6 +8,7 @@ retries: on a public, rate-limited demo server a retry storm is worse than a cle
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from dataclasses import dataclass
@@ -28,12 +29,44 @@ class Coordinate:
     longitude: float
 
 
-@dataclass(frozen=True)
 class Route:
-    distance_meters: float
-    duration_seconds: float
-    geometry: dict[str, Any]  # GeoJSON LineString, [longitude, latitude] positions
-    provider: str
+    """A normalised route. Geometry is a GeoJSON LineString of ``[longitude, latitude]``.
+
+    The geometry is held as parsed data, as compact JSON text, or both, and each form is built
+    from the other only when first needed. Cached routes are stored as text, so a cache hit
+    can be sent to the client without re-encoding tens of thousands of coordinates.
+    """
+
+    __slots__ = ("distance_meters", "duration_seconds", "provider", "_geometry", "_geometry_json")
+
+    def __init__(
+        self,
+        distance_meters: float,
+        duration_seconds: float,
+        geometry: dict[str, Any] | None = None,
+        provider: str = "",
+        *,
+        geometry_json: str | None = None,
+    ) -> None:
+        if geometry is None and geometry_json is None:
+            raise ValueError("A route needs geometry or geometry_json.")
+        self.distance_meters = distance_meters
+        self.duration_seconds = duration_seconds
+        self.provider = provider
+        self._geometry = geometry
+        self._geometry_json = geometry_json
+
+    @property
+    def geometry(self) -> dict[str, Any]:
+        if self._geometry is None:
+            self._geometry = json.loads(self._geometry_json)
+        return self._geometry
+
+    @property
+    def geometry_json(self) -> str:
+        if self._geometry_json is None:
+            self._geometry_json = json.dumps(self._geometry, separators=(",", ":"))
+        return self._geometry_json
 
     @property
     def distance_miles(self) -> float:

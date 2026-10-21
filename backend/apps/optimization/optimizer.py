@@ -241,3 +241,55 @@ def check_plan(plan: FuelPlan, tolerance: float = 1e-6) -> None:
     balance = plan.starting_fuel_used_gallons + plan.gallons_purchased - plan.gallons_consumed
     if abs(balance) > tolerance * (len(plan.purchases) + 1):
         raise PlanCheckError("Fuel bought plus starting fuel used must equal fuel consumed.")
+
+
+@dataclass(frozen=True)
+class StopReduction:
+    plan: FuelPlan
+    minimum_cost_plan: FuelPlan
+    removed_keys: tuple[object, ...]
+
+
+def reduce_stops(
+    distance_miles: float,
+    candidates: list[Candidate],
+    vehicle: Vehicle,
+    min_savings_per_stop: Decimal,
+) -> StopReduction:
+    """Optional practical-stop policy, separate from the minimum-cost optimiser.
+
+    Start from the minimum-cost plan. Repeatedly try removing each used station (excluding it
+    and re-optimising); take the removal that raises the purchase cost least, but only if the
+    new plan has fewer stops and costs less than ``min_savings_per_stop`` more than the current
+    plan. Stop when no removal qualifies.
+
+    Guarantees: every returned plan is feasible and passes ``check_plan``; each removed stop
+    saved less than the threshold; stop count strictly decreases each round. It is a greedy
+    heuristic, not an exact minimiser of "fuel cost + cost per stop".
+    """
+    if min_savings_per_stop <= 0:
+        raise ValueError("min_savings_per_stop must be positive.")
+    best = optimize(distance_miles, candidates, vehicle)
+    current, excluded = best, set()
+    while current.purchases:
+        options = []
+        for purchase in current.purchases:
+            trial_excluded = excluded | {purchase.candidate.key}
+            remaining = [c for c in candidates if c.key not in trial_excluded]
+            try:
+                trial = optimize(distance_miles, remaining, vehicle)
+            except InfeasiblePlan:
+                continue
+            extra = trial.exact_cost - current.exact_cost
+            if len(trial.purchases) < len(current.purchases) and extra < min_savings_per_stop:
+                options.append((extra, str(purchase.candidate.key), purchase.candidate.key, trial))
+        if not options:
+            break
+        _, _, key, current = min(options, key=lambda option: (option[0], option[1]))
+        excluded.add(key)
+    removed = tuple(
+        p.candidate.key
+        for p in best.purchases
+        if p.candidate.key not in {q.candidate.key for q in current.purchases}
+    )
+    return StopReduction(plan=current, minimum_cost_plan=best, removed_keys=removed)

@@ -8,8 +8,8 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 | M1 | Fuel Data Processing & Station Geolocation | Claude | ✅ |
 | M2 | Routing API Integration | Claude | ✅ (live call from Django pending) |
 | M3 | Fuel Optimization Engine | Claude | ✅ (live call from Django pending) |
-| M4 | API Validation & Performance | Claude | ⏳ |
-| M5 | Professional SaaS Dashboard | Codex | ⬜ |
+| M4 | API Validation & Performance | Claude | ✅ (live call from Django pending) |
+| M5 | Professional SaaS Dashboard | Codex | ⏳ |
 | M6 | Interactive Map & API Integration | Codex | ⬜ |
 | M7 | Testing & Independent Code Review | Claude + Codex | ⬜ |
 | M8 | GitHub, Postman & Loom Submission | Rakesh | ⬜ |
@@ -123,6 +123,32 @@ corridor, and whether small cost-saving top-ups should be suppressed by a per-st
 
 **Done when:** typical cross-country requests return quickly on a warm cache and validation errors are field-specific.
 
+**Built:**
+
+- Live-routing investigation and `manage.py verify_routing` (real provider, no mocks).
+- `manage.py benchmark_api` (stage-by-stage and end-to-end, median/p95, request counts).
+- Geometry stored and served as pre-encoded JSON (`RawJSONRenderer`); per-process reuse of the
+  route line and station selection (invalidated by station-data version); single-pass
+  geometry processing.
+- Request coalescing for identical concurrent route requests (cache lock, works across
+  processes sharing the database cache).
+- `geometry_detail: "simplified"` (25 m Douglas–Peucker, display only).
+- Fuel-cost clarity: `estimated_total_fuel_cost_status`, `cost_note`; whole-trip cost
+  calculated when it can be, never implied otherwise.
+- Optional practical-stop policy (`stop_policy.min_savings_per_stop`), separate from the
+  minimum-cost default.
+- JSON `500 internal_error`; CORS defaults for both local dev origins.
+- `docs/api-contract.md`; Postman collection + environment + stdlib runner.
+
+**Verified (2026-10-21):** 392 tests pass (358 before M4 + 34 new; one M3 test's expected
+summary gained the two new fields); `check`, `makemigrations --check`, Ruff clean. Cached
+coast-to-coast request 112 → 11 ms, uncached 158 → 105 ms (stand-in provider, in-process);
+over HTTP 142 → 15 ms cached. Postman collection: 8/8 expected statuses against `runserver`
+with a local stand-in OSRM, cold and cached.
+
+**Not verified:** any live routing provider from Django — all are blocked by the build
+environment's egress policy (proxy 403). Run `python manage.py verify_routing` on an
+unrestricted machine before the Loom recording.
 ## M5 — Professional SaaS Dashboard (Codex)
 
 Next.js, TypeScript, Tailwind. Sidebar, trip inputs, results panels, loading and error states.

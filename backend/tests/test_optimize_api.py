@@ -168,7 +168,15 @@ def test_default_vehicle_plan(client: APIClient, osrm: FakeOsrm, stations: None)
         "fuel_remaining_at_destination_gallons": "0.000",
         "starting_fuel_value": None,
         "estimated_total_fuel_cost": None,
+        # Added in M4: say explicitly why the whole-trip cost is missing.
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": (
+            "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and "
+            "starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only "
+            "fuel bought at the recommended stops."
+        ),
     }
+    assert plan["stop_policy"] is None
     assert plan["candidates"] == {
         "corridor_miles": 5.0,
         "stations_in_search_area": 3,

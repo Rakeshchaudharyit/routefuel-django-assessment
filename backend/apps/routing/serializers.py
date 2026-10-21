@@ -73,6 +73,9 @@ class LocationField(serializers.Field):
 class RouteRequestSerializer(serializers.Serializer):
     start = LocationField()
     finish = LocationField()
+    # "simplified" returns a lighter line for drawing; distances and fuel-stop mile markers
+    # are always computed from the full provider geometry.
+    geometry_detail = serializers.ChoiceField(choices=["full", "simplified"], default="full")
 
 
 DEFAULT_RANGE_MILES = 500.0
@@ -167,8 +170,50 @@ class VehicleField(serializers.Field):
         return price
 
 
+MAX_STOP_SAVINGS = Decimal("1000.00")
+
+
+class StopPolicyField(serializers.Field):
+    """Optional practical-stop policy: ``{"min_savings_per_stop": "5.00"}`` (USD)."""
+
+    default_error_messages = {"type": "Expected an object."}
+
+    def to_internal_value(self, data: Any) -> Decimal:
+        if not isinstance(data, dict):
+            self.fail("type")
+        unknown = sorted(set(data) - {"min_savings_per_stop"})
+        if unknown:
+            raise serializers.ValidationError(
+                {"non_field_errors": [f"Unexpected keys: {', '.join(unknown)}."]}
+            )
+        value = data.get("min_savings_per_stop")
+        message = {
+            "min_savings_per_stop": [
+                f"Must be a USD amount above 0 and at most {MAX_STOP_SAVINGS}, "
+                "with at most 2 decimal places."
+            ]
+        }
+        if isinstance(value, bool) or not isinstance(value, int | float | str):
+            raise serializers.ValidationError(message)
+        try:
+            amount = Decimal(str(value).strip())
+        except InvalidOperation as exc:
+            raise serializers.ValidationError(message) from exc
+        if (
+            not amount.is_finite()
+            or not 0 < amount <= MAX_STOP_SAVINGS
+            or -amount.as_tuple().exponent > 2
+        ):
+            raise serializers.ValidationError(message)
+        return amount.quantize(Decimal("0.01"))
+
+    def to_representation(self, value: Any) -> Any:
+        return value
+
+
 class OptimizeRequestSerializer(RouteRequestSerializer):
     vehicle = VehicleField(required=False)
+    stop_policy = StopPolicyField(required=False, allow_null=True)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         attrs.setdefault("vehicle", VehicleField().to_internal_value({}))

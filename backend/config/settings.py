@@ -168,7 +168,9 @@ REST_FRAMEWORK = {
 # CORS (for the future Next.js dashboard)
 # --------------------------------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS", default="http://localhost:3000")
+CORS_ALLOWED_ORIGINS = env_list(
+    "DJANGO_CORS_ALLOWED_ORIGINS", default="http://localhost:3000,http://127.0.0.1:3000"
+)
 CORS_URLS_REGEX = r"^/api/.*$"
 
 # --------------------------------------------------------------------------

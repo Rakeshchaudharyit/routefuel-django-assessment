@@ -292,13 +292,13 @@ Distance is converted with the exact international mile (1 mi = 1609.344 m) and 
   Persists across restarts; `MAX_ENTRIES` 5000 with Django's cull.
 * Key: `route:v1:` + SHA-256 of provider name, server URL, profile and both endpoints rounded
   to 5 decimals (~1.1 m). Direction-sensitive (A→B ≠ B→A, one-way roads differ).
-* Value: plain dict (distance m, duration s, geometry, provider) — not a pickled class, so
-  code changes can't break old entries; an unreadable entry is treated as a miss.
+* Value: plain dict (distance m, duration s, geometry as compact JSON text since M4, provider) —
+  not a pickled class, so code changes can't break old entries (M2/M3 entries with parsed
+  geometry are still read); an unreadable entry is treated as a miss.
 * TTL `ROUTE_CACHE_TTL` (default 7 days): road networks change slowly, and the demo server's
   rate limit makes reuse valuable. Failures are never cached.
 * Cache read/write errors (e.g. table missing) are logged and the request continues uncached.
-* Not handled: concurrent identical cache misses each call the provider (no request
-  coalescing). Acceptable at assessment scale.
+* Concurrent identical cache misses are coalesced (M4) — see [Request coalescing](#request-coalescing).
 * Tests use `LocMemCache`, cleared around every routing test.
 
 ### Measured performance (local only)
@@ -507,7 +507,149 @@ gzip).
 * Prices are a static snapshot (lowest listed per OPIS ID); no time or availability data.
 * If a route passes a town twice, the station is placed at the closer pass only.
 * Starting-fuel value is reported only when a price is supplied.
-* No per-stop penalty: the plan may include small cost-saving top-ups.
+* No per-stop penalty by default: the plan may include small cost-saving top-ups (M4 adds the
+  optional `stop_policy`).
+
+## API performance and integration readiness (M4)
+
+### Live routing investigation (2026-10-21)
+
+| Check | Result |
+|---|---|
+| `ROUTING_BASE_URL` | `https://router.project-osrm.org` (HTTPS) |
+| Request | `GET /route/v1/driving/{lon},{lat};{lon},{lat}?overview=full&geometries=geojson&steps=false&alternatives=false&annotations=false`, User-Agent set, TLS verification on (httpx default) |
+| Timeout | connect 5 s, read/write/pool `ROUTING_TIMEOUT` (10 s); no retries |
+| Proxy | Both build environments (cloud workspace and the linked computer's sandbox) route HTTPS through an egress proxy that honours an allowlist |
+| DNS | Not resolvable locally in either environment; resolution happens at the proxy |
+| Direct connectivity | `router.project-osrm.org`, `routing.openstreetmap.de` (FOSSGIS OSRM), `valhalla1.openstreetmap.de`, `graphhopper.com`, `api.openrouteservice.org`: proxy answers **403** to the CONNECT (policy denial). `download.geofabrik.de` (OSM extracts for a local OSRM) is also blocked |
+| Django client | `python manage.py verify_routing`: `OSRM request failed: 403 Forbidden` → `503 routing_unavailable` (correct mapping) |
+| Full optimise API | Not reachable live for the same reason |
+
+Conclusion: the code path is not the problem and no alternative provider or local OSRM can be
+reached or built from here; the restriction was not bypassed. The public server itself was
+queried through a separate web-fetch tool (not Django): Dallas → Atlanta 1,253,364 m between
+these Census points. `verify_routing` is the one-command check to run on an unrestricted
+network; it uses that distance as a ±3% plausibility check.
+
+Alternatives considered, if the public server is unsuitable on the demo machine:
+
+| Option | Effort | Notes |
+|---|---|---|
+| Public OSRM (default) | none | 1 req/s, no SLA; fine for a demo with caching |
+| FOSSGIS OSRM `https://routing.openstreetmap.de/routed-car` | set `ROUTING_BASE_URL` | Same OSRM API, same 1 req/s policy |
+| Self-hosted OSRM (Docker, Geofabrik US extract) | hours, ~10 GB+ RAM for the US | Same API; no rate limit |
+| GraphHopper / OpenRouteService | new provider class + API key | Different API; free tiers rate-limited |
+
+### Bottlenecks measured
+
+`python manage.py benchmark_api --runs 20` (before) and `--runs 30` (after), stand-in provider,
+same machine, medians. Stage timings for New York → Los Angeles (42,439 points, 968 KiB):
+
+| Stage | Before | After | Change |
+|---|---:|---:|---|
+| Location resolution (both ends) | 0.02 ms | 0.02 ms | — (offline dict lookup) |
+| Route cache read | 11.6 ms | 3.8 ms | geometry stored as JSON text, not nested lists |
+| Provider response parse + validate (miss only) | 30.6 ms | 27.9 ms | — (unchanged; once per route) |
+| Route geometry processing | 33.8 ms | 26.7 ms cold / 0.0 ms reused | single-pass loop; per-process reuse |
+| Station candidate selection | 20.5 ms | 20.2 ms cold / 2.0 ms reused | per-process reuse keyed by station-data version |
+| Fuel optimisation | 0.5 ms | 0.4 ms | — (already negligible) |
+| JSON serialisation | 34.4 ms | 0.9 ms | pre-encoded geometry spliced into the response |
+
+End to end through Django (test client, no socket), median / p95:
+
+| Route (points) | Uncached before | Uncached after | Cached before | Cached after |
+|---|---:|---:|---:|---:|
+| Dallas → Atlanta (12,534) | 52.1 / 91.1 ms | 43.5 / 76.5 ms | 32.9 / 50.0 ms | 6.8 / 7.8 ms |
+| New York → Los Angeles (42,439) | 158.2 / 257.5 ms | 104.7 / 146.2 ms | 112.2 / 131.3 ms | 11.4 / 12.4 ms |
+| Seattle → Miami (50,648) | 195.9 / 311.5 ms | 114.8 / 206.9 ms | 133.8 / 184.2 ms | 14.3 / 19.5 ms |
+
+Over HTTP (`runserver`, curl, stand-in OSRM on a local socket, median of 7, same script as M3):
+Dallas → Atlanta 66.2 → 56.2 ms uncached, 46.1 → 8.6 ms cached; New York → Los Angeles
+203.2 → 136.9 ms uncached, 142.2 → 15.0 ms cached. "Uncached" there re-used the process's route
+line and station selection (same route repeated); a first-ever route pays the cold stages above.
+
+Provider requests: exactly one per uncached API request and zero per cached one in every run
+(30/30, 0/30); no per-station requests; no geocoding requests.
+
+### Changes made (and why)
+
+1. **Geometry kept as JSON text.** `Route` holds parsed geometry, JSON text, or both, converting
+   lazily. The cache stores text (a single string pickles/unpickles quickly), and
+   `apps.core.renderers.RawJSONRenderer` writes it into the response verbatim via a unique
+   placeholder, so a cached 1 MB geometry is never re-encoded. Measured: serialisation
+   34 → 1 ms, cache read 12 → 4 ms.
+2. **Per-process reuse** (`routing/fuel_plans.py`), bounded LRU of 32 routes each:
+   the thinned `RouteLine` (keyed by the geometry text) and the station selection (keyed by
+   geometry, corridor and a station-data version = count + latest `updated_at` + max
+   uncertainty, one aggregate query per request). An import or edit changes the version, so
+   changed stations are picked up on the next request without a restart (tested).
+3. **Single-pass `RouteLine`** with per-point trigonometry computed once and no intermediate
+   arrays: 34 → 27 ms cold for 42k points.
+4. **Request coalescing** — next section.
+
+Evaluated and not adopted:
+
+* **Gzip (`GZipMiddleware`)**: level 6 takes ~47 ms of CPU for the 1 MB New York → Los Angeles
+  body (961 → 298 KiB). That would cost more than the whole cached request on localhost; the
+  dashboard should use `geometry_detail: "simplified"` instead. Worth enabling at a reverse
+  proxy for remote clients.
+* **Simplifying the geometry before mile-marker matching**: not needed (matching already uses
+  a 0.5-mile thinned line that keeps exact along-route distances), and it would add error.
+* **Caching the fuel plan itself**: plans depend on vehicle inputs; computing one from a reused
+  route and selection takes ~1–3 ms.
+
+### Simplified display geometry
+
+`geometry_detail: "simplified"` returns a Douglas–Peucker simplification at 25 m: every dropped
+point lies within 25 m of the returned line (verified by brute force in
+`test_simplify_respects_tolerance`). It costs ~150 ms once per route per process for a winding
+42k-point line (pure Python), then is reused. It is never used for distances or fuel stops.
+The stand-in routes are straight between towns and simplify to a few dozen points, so their
+size reduction is not representative of real roads; on a synthetic winding 42k-point line it
+kept 3,111 points (−93%).
+
+### Request coalescing
+
+In `services.plan_route`, after a cache miss the request tries `cache.add(key + ":lock")`
+(atomic in LocMem and in the database cache, so it works across processes sharing the
+database). The holder calls the provider, stores the route and releases the lock. Others poll
+the cache every 50 ms; if the holder fails, a waiter takes the lock and tries once itself (one
+retry total, not one per waiter); after `2 × ROUTING_TIMEOUT + 2 s` a waiter proceeds alone.
+The lock expires after `ROUTING_TIMEOUT + 5 s` if a process dies. Cache errors fall back to an
+uncoordinated call. Tested with 6 threads (1 provider call) and with a failing first call.
+
+### Fuel-cost reporting
+
+`fuel_plan.summary` now adds `estimated_total_fuel_cost_status` (`"calculated"` |
+`"unavailable"`) and a one-sentence `cost_note`. The whole-trip cost is calculated when a
+starting-fuel price is supplied, or when no starting fuel was used (then it equals the purchase
+cost); otherwise it is explicitly unavailable instead of implying the starting fuel was free.
+The optimiser and its objective are unchanged.
+
+### Practical-stop policy (optional)
+
+`stop_policy: {"min_savings_per_stop": X}` runs `optimizer.reduce_stops`: start from the
+minimum-cost plan; repeatedly try excluding each used station and re-optimising; accept the
+removal with the smallest cost increase if it reduces the stop count and costs less than X
+extra; stop when none qualifies. Guarantees (property-tested on 300 random instances): every
+plan is feasible and replay-checked; each removal saved less than X; stops never increase.
+It is greedy, not an exact minimiser of "fuel + X per stop". Example (stand-in Dallas → Atlanta,
+X = $1): drops the 5.7-gal Canton stop, $78.20 → $78.41 (+$0.21). The default response is the
+pure minimum-cost plan with `stop_policy: null`.
+
+### Errors and CORS
+
+* Unhandled exceptions now return `500 {"error": {"code": "internal_error", ...}}` (logged with
+  traceback server-side; no internals in the body) instead of Django's HTML page.
+* CORS default origins: `http://localhost:3000` and `http://127.0.0.1:3000`, overridable with
+  `DJANGO_CORS_ALLOWED_ORIGINS`; preflight tested for allowed and refused origins.
+
+### Remaining limitations
+
+* No live provider call from Django has been verified (see above).
+* Coalescing polls; a cache backend with blocking locks would be needed at large scale.
+* Per-process reuse is per worker (each process warms its own LRU).
+* The first `simplified` request for a long route pays ~150 ms.
 
 ## Technical considerations for later milestones
 

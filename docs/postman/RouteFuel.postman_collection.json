@@ -1,0 +1,297 @@
+{
+  "info": {
+    "name": "RouteFuel API",
+    "_postman_id": "96bc30f4-d2fc-4ff4-b4d2-753d4901fda7",
+    "description": "RouteFuel demo requests. Set the environment's base_url (default http://127.0.0.1:8000). Results depend on the live routing provider and the imported fuel data.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health check",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('service ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/health/",
+        "description": "Liveness. No database or network access."
+      }
+    },
+    {
+      "name": "2. Route \u2014 Dallas to Atlanta",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test('distance in miles', () => pm.expect(b.route.distance_miles).to.be.above(0));",
+              "pm.test('routing requests 0 or 1', () => pm.expect([0, 1]).to.include(b.meta.routing_requests));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/",
+        "description": "Route only (M2). Send twice: the second response has meta.cached = true and meta.routing_requests = 0.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Dallas, TX\",\n  \"finish\": \"Atlanta, GA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "3. Optimized route \u2014 Dallas to Atlanta",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('route geometry is a GeoJSON LineString', () => pm.expect(body.route.geometry.type).to.eql('LineString'));",
+              "pm.test('fuel summary present', () => pm.expect(body.fuel_plan.summary).to.have.property('total_purchase_cost'));",
+              "pm.test('stops are flagged approximate', () => body.fuel_plan.stops.forEach(s => pm.expect(s.location.approximate).to.eql(true)));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "Default truck: 500-mile range, 10 MPG, 50-gallon tank, starts full. total_purchase_cost is money spent at the recommended stops; estimated_total_fuel_cost is null because no starting-fuel price is given.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Dallas, TX\",\n  \"finish\": \"Atlanta, GA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "4. Optimized route \u2014 long distance (New York to Los Angeles)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('route geometry is a GeoJSON LineString', () => pm.expect(body.route.geometry.type).to.eql('LineString'));",
+              "pm.test('fuel summary present', () => pm.expect(body.fuel_plan.summary).to.have.property('total_purchase_cost'));",
+              "pm.test('stops are flagged approximate', () => body.fuel_plan.stops.forEach(s => pm.expect(s.location.approximate).to.eql(true)));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "About 2,800 miles, many stops. geometry_detail = simplified returns a lighter line for the map (25 m tolerance); stop mile markers still come from the full route.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"New York, NY\",\n  \"finish\": \"Los Angeles, CA\",\n  \"geometry_detail\": \"simplified\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "5. Optimized route \u2014 custom vehicle and starting fuel",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('route geometry is a GeoJSON LineString', () => pm.expect(body.route.geometry.type).to.eql('LineString'));",
+              "pm.test('fuel summary present', () => pm.expect(body.fuel_plan.summary).to.have.property('total_purchase_cost'));",
+              "pm.test('stops are flagged approximate', () => body.fuel_plan.stops.forEach(s => pm.expect(s.location.approximate).to.eql(true)));",
+              "pm.test('whole-trip cost calculated', () => pm.expect(pm.response.json().fuel_plan.summary.estimated_total_fuel_cost_status).to.eql('calculated'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "Starts with 20 gallons valued at $3.199/gal, so estimated_total_fuel_cost is calculated. stop_policy drops any stop that saves less than $2.00 (the response reports the extra cost).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Dallas, TX\",\n  \"finish\": \"Atlanta, GA\",\n  \"vehicle\": {\n    \"range_miles\": 500,\n    \"mpg\": 10,\n    \"starting_fuel_gallons\": 20,\n    \"starting_fuel_price_per_gallon\": \"3.199\"\n  },\n  \"stop_policy\": {\n    \"min_savings_per_stop\": \"2.00\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "6. Invalid input",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 400', () => pm.response.to.have.status(400));",
+              "const e = pm.response.json().error;",
+              "pm.test('error envelope', () => pm.expect(e.code).to.eql('invalid'));",
+              "pm.test('field details', () => pm.expect(e.details).to.have.all.keys('start', 'finish', 'vehicle'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "Latitude out of range, finish missing, mpg not positive: 400 with field-level details.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": {\n    \"latitude\": 95,\n    \"longitude\": -96.8\n  },\n  \"vehicle\": {\n    \"mpg\": 0\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "7a. Unreachable route \u2014 Los Angeles to Honolulu",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 422', () => pm.response.to.have.status(422));",
+              "pm.test('route_not_found', () => pm.expect(pm.response.json().error.code).to.eql('route_not_found'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "Honolulu is a valid US coordinate but has no road link to the mainland, so the provider returns no route.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Los Angeles, CA\",\n  \"finish\": {\n    \"latitude\": 21.3069,\n    \"longitude\": -157.8583\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "7b. Infeasible fuel plan \u2014 10-mile range",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 422', () => pm.response.to.have.status(422));",
+              "const e = pm.response.json().error;",
+              "pm.test('no_feasible_fuel_plan', () => pm.expect(e.code).to.eql('no_feasible_fuel_plan'));",
+              "pm.test('gap reported', () => pm.expect(e.details.gap_miles).to.be.above(e.details.max_reach_miles));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/v1/routes/optimize/",
+        "description": "A 1-gallon tank cannot bridge the gaps between stations; details give the failing stretch.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"start\": \"Dallas, TX\",\n  \"finish\": \"Atlanta, GA\",\n  \"vehicle\": {\n    \"range_miles\": 10,\n    \"mpg\": 10\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    }
+  ]
+}

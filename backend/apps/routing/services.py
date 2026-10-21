@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
+import math
+import time
 from dataclasses import dataclass
 
 from django.conf import settings
@@ -22,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 CACHE_KEY_VERSION = "v1"
 CACHE_COORDINATE_DECIMALS = 5  # ~1.1 m; inputs closer than this share a cached route
+COALESCE_POLL_SECONDS = 0.05
+COALESCE_GRACE_SECONDS = 2.0
 
 
 class SameLocationError(Exception):
@@ -57,12 +62,45 @@ def plan_route(
     if cached is not None:
         return RoutePlan(origin, destination, cached, cached=True, routing_requests=0)
 
-    route = provider.route(
-        Coordinate(origin.latitude, origin.longitude),
-        Coordinate(destination.latitude, destination.longitude),
-    )
-    _cache_set(key, route)
+    # Request coalescing: the first request for an uncached route takes a short-lived lock in
+    # the shared cache and calls the provider; identical concurrent requests wait for its
+    # result instead of making their own call. cache.add() is atomic in every Django backend
+    # used here (LocMem in tests, the database cache otherwise), so this also works across
+    # processes that share the database.
+    lock_key = f"{key}:lock"
+    deadline = time.monotonic() + 2 * settings.ROUTING_TIMEOUT + COALESCE_GRACE_SECONDS
+    holding = _acquire(lock_key)
+    while not holding:
+        time.sleep(COALESCE_POLL_SECONDS)
+        cached = _cache_get(key)
+        if cached is not None:
+            return RoutePlan(origin, destination, cached, cached=True, routing_requests=0)
+        if time.monotonic() > deadline:
+            logger.warning("Gave up waiting for a concurrent identical route request.")
+            break
+        holding = _acquire(lock_key)  # the holder failed or its lock expired
+    try:
+        route = provider.route(
+            Coordinate(origin.latitude, origin.longitude),
+            Coordinate(destination.latitude, destination.longitude),
+        )
+        _cache_set(key, route)
+    finally:
+        if holding:
+            _release(lock_key)
     return RoutePlan(origin, destination, route, cached=False, routing_requests=1)
+
+
+def _acquire(lock_key: str) -> bool:
+    try:
+        return cache.add(lock_key, 1, timeout=math.ceil(settings.ROUTING_TIMEOUT) + 5)
+    except DatabaseError:
+        return True  # cache unavailable: proceed uncoordinated
+
+
+def _release(lock_key: str) -> None:
+    with contextlib.suppress(DatabaseError):  # if it fails, the lock expires on its own
+        cache.delete(lock_key)
 
 
 def _rounded(location: ResolvedLocation) -> tuple[float, float]:
@@ -93,7 +131,7 @@ def _cache_get(key: str) -> Route | None:
         return None
     try:
         return Route(**data)
-    except TypeError:
+    except (TypeError, ValueError):
         return None  # stale shape from an older version; refetch
 
 
@@ -101,7 +139,7 @@ def _cache_set(key: str, route: Route) -> None:
     data = {
         "distance_meters": route.distance_meters,
         "duration_seconds": route.duration_seconds,
-        "geometry": route.geometry,
+        "geometry_json": route.geometry_json,
         "provider": route.provider,
     }
     try:
