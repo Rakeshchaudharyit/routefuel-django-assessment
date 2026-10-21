@@ -1,6 +1,8 @@
 # Data
 
-Place the employer-provided fuel-price CSV here (for example `fuel-prices.csv`).
+| File | What it is |
+|------|------------|
+| `fuel-prices-for-be-assessment.csv` | Employer-provided fuel prices (8,151 rows). Imported by `python manage.py import_fuel_prices`. |
+| `reference/Gaz_places_national.txt` | US Census place gazetteer used for offline, city-level geolocation. See `reference/SOURCE.md`. |
 
-M1 adds an import command that reads this file, cleans it, and loads station
-records into SQLite. Nothing in this folder is read during M0.
+Both files are read only by management commands. API requests read from SQLite, never from these files.

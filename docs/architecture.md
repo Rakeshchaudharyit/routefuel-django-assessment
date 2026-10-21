@@ -15,7 +15,7 @@ Next.js dashboard (M5–M6)
 Django REST API  /api/v1/
   ├── core          health, error envelope, shared validation
   ├── routing       location resolution, OSRM client, route caching
-  ├── fuel          CSV import, FuelStation data, corridor queries
+  ├── fuel          CSV import, FuelStation data, offline geolocation, corridor queries
   └── optimization  pure-Python cost minimisation (no I/O)
         │                         │
         ▼                         ▼
@@ -71,13 +71,154 @@ Every DRF-handled error returns:
 (M2) will map to explicit codes (e.g. `route_not_found`, `routing_unavailable`) rather than
 leaking provider responses.
 
+## Fuel data layer (M1)
+
+### Source CSV — measured profile
+
+`backend/data/fuel-prices-for-be-assessment.csv`, UTF-8, 7 columns:
+`OPIS Truckstop ID, Truckstop Name, Address, City, State, Rack ID, Retail Price`.
+
+| Check | Finding |
+|-------|---------|
+| Rows | 8,151; every row has exactly 7 fields |
+| Missing values | None in any column. One address is just `","` |
+| Untrimmed whitespace | City 1,256 rows, Address 97, Name 3 |
+| Station IDs | 6,738 distinct; 678 IDs appear on 2–6 rows (1,413 extra rows) |
+| Repeated IDs | Address, city, state and rack always agree; name spelling differs in 226 groups; price differs in 597 groups (max spread $0.90, >$0.10 in 216) |
+| Shared locations | 358 address/city/state combinations are used by 759 *different* IDs (e.g. a Love's and a local stop at the same exit) |
+| Prices | All parse as decimals; $2.687–$6.399; up to 8 decimal places (averaged values like `3.00733333`) |
+| States | 57 codes: 48 US states (no AK, HI, DC) plus 9 Canadian provinces/territories (112 stations, 620 rows) |
+| Address quality | 3,762 "highway + exit" (`I-44, EXIT 283 & US-69`), 2,856 highway only (`US-46`), 114 other, **6** with a street number |
+| Coordinates | None anywhere in the file |
+
+### Validation and import rules
+
+| Rule | Outcome |
+|------|---------|
+| Header lacks a required column, file missing, not UTF-8, unparsable | Whole import aborts before any write (`CommandError`) |
+| Wrong number of cells in a row | Row rejected: `malformed_row` |
+| Blank ID, name, city, state, rack or price | Row rejected: `missing_field` |
+| ID / rack not a positive integer (≤ 2³¹−1) | Row rejected: `invalid_id` / `invalid_rack_id` |
+| State is a Canadian province | Row **skipped**: `non_us_station` (out of scope; currency unconfirmed) |
+| State not one of the 50 states + DC | Row rejected: `invalid_state` |
+| Price not a finite decimal, outside $0.50–$20.00, or more than 8 decimals | Row rejected: `invalid_price` (never rounded) |
+| Blank or punctuation-only address | Kept with an `incomplete_address` warning (address is not used for geolocation) |
+
+Text is trimmed and whitespace-collapsed; state codes are upper-cased. Every rejected or skipped
+row is reported with its CSV line number, ID, reason and detail (`--show-issues N`).
+
+### Duplicate handling
+
+* **One station per OPIS ID.** Rows with the same ID are merged.
+* **Conflicting location → reject, don't guess.** If merged rows disagree on address, city,
+  state or rack, every row for that ID is rejected as `conflicting_duplicate`. (None in the
+  supplied file.)
+* **Price:** `retail_price` = lowest listed price; `max_retail_price` and `price_observations`
+  keep the spread visible. The file has no dates, so no row can be called "latest". The
+  lowest price is the best listed price at that stop; the stored max lets M3/M4 show the range
+  or switch policy without re-importing.
+* **Name:** most frequent spelling; first seen wins ties.
+* **Invalid rows don't sink valid ones:** a bad price row is rejected, and the station is built
+  from the remaining valid rows.
+* **Same location, different IDs:** kept as separate stations — they are different businesses.
+
+### Re-import semantics
+
+* Upsert by `opis_id` inside one transaction (`bulk_create` + `bulk_update`, batches of 500).
+  Any database error rolls back the entire import; `--dry-run` runs everything then rolls back.
+* Unchanged stations are not written. Changed stations are updated.
+* If a station's address, city or state changes, its coordinates are cleared (back to
+  `unresolved`) so stale coordinates are never kept.
+* Stations missing from a new file are kept and counted, not deleted.
+
+### Schema — `fuel.FuelStation`
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `opis_id` | PositiveInteger, **unique** | Natural key |
+| `name`, `address`, `city`, `state`, `rack_id` | text / int | Normalised source values |
+| `retail_price`, `max_retail_price` | Decimal(10, 8) | Exact source precision |
+| `price_observations` | PositiveSmallInteger | Rows merged into this station |
+| `latitude`, `longitude` | Float, nullable | WGS84 |
+| `geolocation_source` | choice | `""` or `census_gazetteer_places_2010` |
+| `geolocation_accuracy` | choice | `unresolved`, `city`, `address` (reserved) |
+| `location_uncertainty_miles` | Float, nullable | Rough spread of the matched town |
+| `created_at`, `updated_at` | DateTime | |
+
+Indexes: unique `opis_id`; `(latitude, longitude)` for corridor queries; `(state, city)`;
+`retail_price`. Database check constraints enforce valid prices (`> 0`, max ≥ min), coordinate
+ranges, and that **`unresolved` ⇔ no coordinates**. No unresolved station can ever carry a
+point, even if application code is wrong.
+
+### Geolocation strategy
+
+| Option | Verdict |
+|--------|---------|
+| Nominatim (OSM) | Usage policy caps at 1 request/s and discourages bulk geocoding; exit-style addresses geocode poorly. Rejected for bulk use. |
+| US Census Geocoder | Street addresses only; 6 of 6,738 stations have one. Not useful. |
+| Commercial APIs (Google, Mapbox) | API keys, cost and terms restricting stored results. Out of scope. |
+| **Offline Census Gazetteer (chosen)** | Public domain, no network, deterministic, ~29.5k US places with an internal point and land area. City-level only. |
+
+`geolocate_stations` matches each station's (city, state) to a Census place:
+
+1. Exact normalised name, after removing Census descriptors (`city`, `town`, `CDP`, `(balance)`,
+   …; case-sensitive, so *Carson City* stays intact). Normalisation covers `St.`→`Saint`,
+   `Ft`→`Fort`, `Mt`→`Mount`, accents, punctuation and hyphens.
+2. The same name with spaces removed (`Mc Calla` → `McCalla`).
+3. `"<name> City"` (`Boise` → `Boise City`).
+4. First segment of consolidated governments (`Indianapolis city (balance)`,
+   `Augusta-Richmond County consolidated government (balance)`).
+
+Anything not uniquely matched stays **unresolved**. Two places with the same name in one state
+counts as `ambiguous`, and we don't pick one. Lookups are cached per (city, state) during a run,
+and results persist on the rows, so later runs only look at unresolved stations.
+
+Writes are grouped by outcome (one `UPDATE … WHERE id IN (…)` per matched place). Measured on
+the full dataset, that took the write step from **7.12 s** (Django `bulk_update`, which emits
+per-row `CASE` expressions) to **0.85 s**.
+
+### Limitations — read before trusting a coordinate
+
+* **No station has verified coordinates.** City-level points mark the town, not the pump. A
+  truck stop at an interstate exit can sit outside the town's limits.
+* `location_uncertainty_miles` = radius of a circle with the place's land area (min 1 mile).
+  Measured over the 6,228 resolved stations: median 1.6 mi, p90 4.6 mi, p99 12.1 mi, max 15.4 mi
+  (Jacksonville, FL). It describes the town's size and is *not* a guaranteed error bound.
+* 398 stations (6.0%) are unresolved and are never route candidates. Most are unincorporated
+  communities or New England/Mid-Atlantic townships, which the places gazetteer doesn't list.
+  Highest counts: VA 40, PA 33, NJ 28, NY 26, MA 21.
+* The gazetteer is the 2010 vintage (the newer Census files were unreachable from the build
+  environment). Place points rarely move; a newer file can be dropped in without code changes
+  (`data/reference/SOURCE.md`).
+* **Future enrichment path:** match the CSV's interstate exit numbers (`I-44, EXIT 283`) to
+  OpenStreetMap `motorway_junction` nodes from an offline extract, and store the result as
+  `geolocation_accuracy="address"`. The schema, source field and "never overwrite address-level"
+  rule are already in place.
+
+### Station lookup for route matching
+
+`apps/fuel/queries.py` provides `routable_stations()`, which excludes unresolved stations, and
+`stations_in_bounding_box(BoundingBox.around(points, padding_miles))`. Measured: a Chicago–Dallas
+box padded by 10 miles returns 1,093 of 6,228 candidates in a median **4.4 ms**, and SQLite uses
+the `fuel_station_lat_lng` index. Call `.order_by()` to skip the model's default ordering when
+order doesn't matter.
+
+Planned M3 matching (not implemented):
+
+1. Pad the route's bounding box by corridor width + max uncertainty and run one indexed query.
+2. In memory, compute each candidate's distance to the route polyline (point-to-segment on a local
+   equirectangular projection) and its mile marker along the route.
+3. Keep stations within `corridor + location_uncertainty_miles`, and label them approximate in the
+   API.
+
+No per-station routing calls are made.
+
 ## Technical considerations for later milestones
 
-These are recorded now and deliberately **not** implemented in M0.
+Recorded in M0; item 1 was addressed in M1, the rest are for M2–M4.
 
-1. **Station coordinates.** The CSV may only contain address/city/state. We must not fabricate
-   exact station positions. Plan: approximate each station from an offline US city dataset,
-   store a precision flag, and surface "approximate location" in the API and UI.
+1. **Station coordinates.** Done in M1 — see [Fuel data layer](#fuel-data-layer-m1). The API and
+   UI must label city-level positions as approximate.
 2. **Vehicle model.** 500 mi range ÷ 10 MPG ⇒ 50 gal usable tank.
 3. **Inputs to the optimiser.** Remaining fuel, price at each reachable station, and
    reachability (no gap between consecutive usable stations may exceed 500 mi, including the

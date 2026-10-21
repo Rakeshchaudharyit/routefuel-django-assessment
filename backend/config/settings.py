@@ -166,6 +166,13 @@ ROUTING_BASE_URL = os.environ.get("ROUTING_BASE_URL", "https://router.project-os
 ROUTING_TIMEOUT = env_float("ROUTING_TIMEOUT", default=10.0)
 
 # --------------------------------------------------------------------------
+# Fuel data (M1). Files live in the repository; nothing is fetched at runtime.
+# --------------------------------------------------------------------------
+
+FUEL_PRICES_CSV_PATH = BASE_DIR / "data" / "fuel-prices-for-be-assessment.csv"
+GAZETTEER_PLACES_PATH = BASE_DIR / "data" / "reference" / "Gaz_places_national.txt"
+
+# --------------------------------------------------------------------------
 # Logging
 # --------------------------------------------------------------------------
 

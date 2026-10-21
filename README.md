@@ -4,8 +4,8 @@ A Django REST API that plans a driving route between two US locations and recomm
 buy fuel so the trip costs as little as possible. Built as the backend assessment for the
 Backend Django Engineer role at Spotter AI.
 
-> **Status:** M0 (foundation) complete. Routing, fuel data and optimisation arrive in M1–M4 —
-> see [docs/milestones.md](docs/milestones.md).
+> **Status:** M0 (foundation) and M1 (fuel data) complete. Routing and optimisation arrive in
+> M2–M4 — see [docs/milestones.md](docs/milestones.md).
 
 ## Assessment requirements
 
@@ -49,6 +49,7 @@ python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 python manage.py migrate
+python manage.py import_fuel_prices      # load the CSV + offline geolocation (~2 s)
 ```
 
 ## Environment configuration
@@ -86,6 +87,39 @@ ruff check .             # lint
 ruff format --check .    # formatting
 ```
 
+## Fuel data
+
+```bash
+python manage.py import_fuel_prices                 # import + geolocate new stations
+python manage.py import_fuel_prices --dry-run       # validate and report only; writes nothing
+python manage.py import_fuel_prices --file other.csv --show-issues 20
+python manage.py geolocate_stations [--force]       # re-run offline geolocation only
+```
+
+The import is idempotent: running it again inserts and updates nothing unless the CSV changed.
+Each run reports rows read, valid, rejected and skipped (with reasons), duplicates merged, and
+stations inserted, updated, unchanged and present in the database but missing from the file.
+
+**Results on the supplied CSV** (measured on a fresh database):
+
+| | |
+|---|---|
+| CSV rows | 8,151 |
+| Rejected (invalid data) | 0 |
+| Skipped — Canadian stations, out of scope | 620 rows (112 stations) |
+| Duplicate rows merged | 905 |
+| US stations imported | 6,626 |
+| City-level approximate coordinates | 6,228 (94.0%) |
+| Unresolved (no coordinates) | 398 — 371 city not in gazetteer, 27 ambiguous |
+| Address-level (verified) coordinates | 0 |
+| First import + geolocation | 0.72 s + 1.22 s |
+| Re-import + geolocation | 0.26 s + 0.31 s |
+
+**Coordinates are approximate.** The CSV has no coordinates and almost no street addresses, so
+stations are placed at their town's Census point and flagged `geolocation_accuracy="city"` with a
+`location_uncertainty_miles` radius. Unresolved stations have no coordinates and are excluded
+from route candidates. Details: [docs/architecture.md](docs/architecture.md#fuel-data-layer-m1).
+
 ## API
 
 | Method | Path | Description |
@@ -103,10 +137,11 @@ routefuel/
 │   ├── apps/
 │   │   ├── core/           health endpoint, error envelope
 │   │   ├── routing/        location resolution & OSRM (M2)
-│   │   ├── fuel/           fuel CSV import & station queries (M1)
+│   │   ├── fuel/           FuelStation model, CSV importer, offline geolocation,
+│   │   │                   bounding-box station queries, management commands
 │   │   └── optimization/   fuel-stop optimiser (M3)
 │   ├── tests/              pytest suite
-│   ├── data/               fuel-price CSV goes here
+│   ├── data/               fuel-price CSV; reference/ Census gazetteer
 │   ├── manage.py
 │   ├── requirements.txt    runtime dependencies
 │   ├── requirements-dev.txt
@@ -120,21 +155,8 @@ routefuel/
 └── README.md
 ```
 
-## M0 acceptance criteria
+## Acceptance criteria
 
-1. Django starts successfully.
-2. Dependencies are installed.
-3. Django REST Framework works.
-4. SQLite migrations succeed.
-5. `/api/v1/health/` returns HTTP 200.
-6. Automated tests pass.
-7. Django system checks pass.
-8. Ruff checks pass.
-9. README exists.
-10. Architecture documentation exists.
-11. Environment configuration is documented.
-12. Git is initialised.
-13. No secrets or generated files are committed.
+Milestone checklists and their verification results are in [docs/milestones.md](docs/milestones.md).
 
-See [docs/architecture.md](docs/architecture.md) for design decisions and the technical
-considerations planned for later milestones.
+See [docs/architecture.md](docs/architecture.md) for design decisions and data limitations.
