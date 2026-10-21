@@ -2,38 +2,35 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { type Map as MapInstance } from "maplibre-gl";
 import { Expand, Layers, MapPin, RotateCcw } from "lucide-react";
-import type { FuelStop, OptimizeResponse, ResolvedLocation } from "@/types/api";
+import type { OptimizeResponse } from "@/types/api";
+import { RouteLayer } from "./route-layer";
 
-// M5 adapter: ready for API-driven geometry and selection wiring in M6.
 export interface RouteMapProps {
-  geometry?: OptimizeResponse["route"]["geometry"];
-  origin?: ResolvedLocation;
-  destination?: ResolvedLocation;
-  stops?: FuelStop[];
-  attribution?: string;
-  onStopSelect?: (opisId: number) => void;
+  result: OptimizeResponse | null;
+  selectedId: number | null;
+  onStopSelect: (opisId: number) => void;
 }
-export function RouteMap({
-  geometry,
-  origin,
-  destination,
-  stops,
-  attribution,
-  onStopSelect,
-}: RouteMapProps) {
+export function RouteMap({ result, selectedId, onStopSelect }: RouteMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<MapInstance | null>(null);
+  const layer = useRef<RouteLayer | null>(null);
+  const callback = useRef(onStopSelect);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    callback.current = onStopSelect;
+  }, [onStopSelect]);
   const reset = () =>
-    map.current?.fitBounds(
-      [
-        [-125, 24],
-        [-66, 50],
-      ],
-      { padding: 30, duration: 500 },
-    );
+    result
+      ? layer.current?.fit()
+      : map.current?.fitBounds(
+          [
+            [-125, 24],
+            [-66, 50],
+          ],
+          { padding: 30, duration: 0 },
+        );
   useEffect(() => {
     if (!container.current) return;
     let instance: MapInstance;
@@ -49,116 +46,73 @@ export function RouteMap({
         attributionControl: false,
       });
       map.current = instance;
-      instance.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right",
-      );
-      instance.addControl(
-        new maplibregl.AttributionControl({ compact: false }),
-        "bottom-right",
-      );
-      instance.on("load", () => setReady(true));
-      instance.on("error", () => setFailed(true));
     } catch {
-      setTimeout(() => setFailed(true), 0);
-      return;
+      const timer = setTimeout(() => setFailed(true), 0);
+      return () => clearTimeout(timer);
     }
-    const observer = new ResizeObserver(() => instance.resize());
+    const renderLayer = new RouteLayer(instance, (id) => callback.current(id));
+    layer.current = renderLayer;
+    instance.addControl(
+      new maplibregl.NavigationControl({ showCompass: false }),
+      "top-right",
+    );
+    const load = () => {
+      setReady(true);
+      setFailed(false);
+    };
+    const error = () => setFailed(true);
+    instance.on("load", load);
+    instance.on("error", error);
+    const observer = new ResizeObserver(() => {
+      instance.resize();
+      renderLayer.fit();
+    });
     observer.observe(container.current);
     return () => {
       observer.disconnect();
-      instance.remove();
+      instance.off("load", load);
+      instance.off("error", error);
+      renderLayer.destroy();
+      layer.current = null;
       map.current = null;
+      instance.remove();
     };
   }, [retry]);
-
   useEffect(() => {
-    const instance = map.current;
-    if (!instance || !ready) return;
-    const markers: maplibregl.Marker[] = [];
-    const addMarker = (location: ResolvedLocation, kind: string) => {
-      const el = document.createElement("div");
-      el.className = `map-marker ${kind}`;
-      el.title = location.label;
-      markers.push(
-        new maplibregl.Marker({ element: el })
-          .setLngLat([location.longitude, location.latitude])
-          .setPopup(new maplibregl.Popup().setText(location.label))
-          .addTo(instance),
-      );
-    };
-    if (geometry) {
-      instance.addSource("route", {
-        type: "geojson",
-        data: { type: "Feature", properties: {}, geometry },
-      });
-      instance.addLayer({
-        id: "route-line",
-        type: "line",
-        source: "route",
-        paint: { "line-color": "#148477", "line-width": 5 },
-        layout: { "line-cap": "round", "line-join": "round" },
-      });
-      const bounds = new maplibregl.LngLatBounds();
-      geometry.coordinates.forEach((point) => bounds.extend(point));
-      if (!bounds.isEmpty())
-        instance.fitBounds(bounds, { padding: 60, maxZoom: 12 });
-    }
-    if (origin) addMarker(origin, "origin");
-    if (destination) addMarker(destination, "destination");
-    stops?.forEach((stop) => {
-      const el = document.createElement("button");
-      el.className = `map-marker stop ${stop.location.approximate ? "approximate" : ""}`;
-      el.textContent = String(stop.sequence);
-      el.setAttribute(
-        "aria-label",
-        `${stop.station.name}, ${stop.location.approximate ? "approximate town location" : "address location"}`,
-      );
-      el.onclick = () => onStopSelect?.(stop.station.opis_id);
-      markers.push(
-        new maplibregl.Marker({ element: el })
-          .setLngLat([stop.station.longitude, stop.station.latitude])
-          .addTo(instance),
-      );
-    });
-    const credit = attribution
-      ? new maplibregl.AttributionControl({
-          customAttribution: attribution,
-          compact: false,
-        })
-      : null;
-    if (credit) instance.addControl(credit);
-    return () => {
-      if (map.current !== instance) return;
-      markers.forEach((marker) => marker.remove());
-      if (instance.getLayer("route-line")) instance.removeLayer("route-line");
-      if (instance.getSource("route")) instance.removeSource("route");
-      if (credit) instance.removeControl(credit);
-    };
-  }, [ready, geometry, origin, destination, stops, attribution, onStopSelect]);
+    if (ready && result) layer.current?.setPlan(result);
+  }, [ready, result]);
+  useEffect(() => {
+    if (ready) layer.current?.select(selectedId);
+  }, [ready, result, selectedId]);
 
   return (
-    <section className="panel map-panel" aria-label="Interactive route map">
+    <section
+      id="route-map-panel"
+      className="panel map-panel"
+      aria-label="Interactive route map"
+    >
       <div className="map-heading">
         <div>
           <span className="live-dot" />
           <h2>Route overview</h2>
         </div>
-        <span>United States</span>
+        <span>{result ? "Optimized route" : "United States"}</span>
       </div>
       <div className="map-stage">
         <div className="map-canvas" ref={container} />
         <div className="map-tools">
           <button
             className="map-button"
-            aria-label="Reset map to United States"
+            aria-label={
+              result ? "Fit map to route" : "Reset map to United States"
+            }
             onClick={reset}
             disabled={!ready}
           >
             <Expand size={17} />
           </button>
         </div>
-        {!geometry && (
+        {!result && (
           <div className="map-empty">
             <span className="map-empty-icon">
               <MapPin size={22} />

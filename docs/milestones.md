@@ -6,11 +6,11 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 |---|-----------|-------|--------|
 | M0 | Django Foundation | Claude | ✅ |
 | M1 | Fuel Data Processing & Station Geolocation | Claude | ✅ |
-| M2 | Routing API Integration | Claude | ✅ (live call from Django pending) |
-| M3 | Fuel Optimization Engine | Claude | ✅ (live call from Django pending) |
-| M4 | API Validation & Performance | Claude | ✅ (live call from Django pending) |
-| M5 | Professional SaaS Dashboard | Codex | ⏳ |
-| M6 | Interactive Map & API Integration | Codex | ⬜ |
+| M2 | Routing API Integration | Claude | ✅ |
+| M3 | Fuel Optimization Engine | Claude | ✅ |
+| M4 | API Validation & Performance | Claude | ✅ |
+| M5 | Professional SaaS Dashboard | Codex | ✅ |
+| M6 | Interactive Map & API Integration | Codex | ✅ |
 | M7 | Testing & Independent Code Review | Claude + Codex | ⬜ |
 | M8 | GitHub, Postman & Loom Submission | Rakesh | ⬜ |
 
@@ -151,12 +151,29 @@ environment's egress policy (proxy 403). Run `python manage.py verify_routing` o
 unrestricted machine before the Loom recording.
 ## M5 — Professional SaaS Dashboard (Codex)
 
-Next.js, TypeScript, Tailwind. Sidebar, trip inputs, results panels, loading and error states.
-Light theme, navy/teal accents, no placeholder statistics.
+Completed and preserved in local commit `13fac92`. Next.js, strict TypeScript, Tailwind,
+responsive navy/teal dashboard, validated form, typed API client and reusable map/result panels.
+All seven M5 tests, TypeScript, ESLint and production build pass.
+See [M5 report](m5-frontend-report.md).
 
 ## M6 — Interactive Map & API Integration (Codex)
 
-MapLibre GL route line and fuel-stop markers wired to the live API.
+Implemented MapLibre route/source updates, A/B endpoints, ordered fuel markers, geographic
+uncertainty areas, two-way marker/card selection, popups and route fitting. Runtime response
+validation protects the map and summaries. Previous valid results survive failed requests;
+zero-stop plans succeed. Added optional stop policy and remaining-fuel display.
+
+**Live verification, 21 October 2026:** the historical M2–M4 OSRM connectivity block no longer
+reproduces on this local machine. `manage.py verify_routing` passed after populating the empty
+local station database with the existing CSV importer (6,626 stations, 6,228 geolocated).
+No Django source or API contracts changed. Dallas–Atlanta: 778.8 mi, three stops, $78.19 purchases.
+New York–Los Angeles: 2,810.37 mi, 17 stops, $698.65 purchases. Fresh provider calls and cache reuse
+were both verified; browser routes and marker/card interaction were checked independently.
+
+**Quality:** 35 passing frontend tests (seven preserved M5 tests plus 28 deterministic M6 tests);
+strict TypeScript, ESLint and production build. Browser checks at 1440, 1280, 768 and 390 px.
+See [M6 integration report](m6-integration-report.md) for evidence, limits and acceptance.
+M7 remains not started.
 
 ## M7 — Testing & Independent Code Review
 

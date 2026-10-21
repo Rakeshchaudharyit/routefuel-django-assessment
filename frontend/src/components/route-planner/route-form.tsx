@@ -15,10 +15,12 @@ export function RouteForm({
   loading,
   onSubmit,
   serverField,
+  serverErrors = {},
 }: {
   loading: boolean;
   onSubmit: (request: OptimizeRequest) => void;
   serverField?: string;
+  serverErrors?: Record<string, string>;
 }) {
   const [start, setStart] = useState("");
   const [finish, setFinish] = useState("");
@@ -27,7 +29,12 @@ export function RouteForm({
   const [mpg, setMpg] = useState("10");
   const [fuel, setFuel] = useState("50");
   const [price, setPrice] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [localErrors, setErrors] = useState<Record<string, string>>({});
+  const [savings, setSavings] = useState("");
+  const errors = { ...serverErrors, ...localErrors };
+  const showAdvanced =
+    advanced ||
+    Object.keys(serverErrors).some((key) => !["start", "finish"].includes(key));
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next: Record<string, string> = {};
@@ -55,9 +62,18 @@ export function RouteForm({
       (!/^\d+(\.\d{1,8})?$/.test(price) || +price < 0.5 || +price > 20)
     )
       next.price = "Enter $0.50–$20.00, up to 8 decimal places.";
+    if (
+      savings &&
+      (!/^\d+(\.\d{1,2})?$/.test(savings) || +savings <= 0 || +savings > 1000)
+    )
+      next.savings = "Enter savings above $0, up to $1,000 (2 decimal places).";
     setErrors(next);
     if (Object.keys(next).length) {
-      setAdvanced(Boolean(next.range || next.mpg || next.fuel || next.price));
+      setAdvanced(
+        Boolean(
+          next.range || next.mpg || next.fuel || next.price || next.savings,
+        ),
+      );
       requestAnimationFrame(() =>
         document.getElementById(Object.keys(next)[0])?.focus(),
       );
@@ -72,6 +88,7 @@ export function RouteForm({
         starting_fuel_gallons: +fuel,
         ...(price ? { starting_fuel_price_per_gallon: price } : {}),
       },
+      ...(savings ? { stop_policy: { min_savings_per_stop: savings } } : {}),
       geometry_detail: "simplified",
     });
   }
@@ -152,7 +169,7 @@ export function RouteForm({
               type="button"
               className="text-button"
               onClick={() => setAdvanced(!advanced)}
-              aria-expanded={advanced}
+              aria-expanded={showAdvanced}
               aria-controls="vehicle-settings"
             >
               <SlidersHorizontal size={15} />
@@ -163,7 +180,7 @@ export function RouteForm({
               {range || "—"} mi range <span>·</span> {mpg || "—"} MPG
             </span>
           </div>
-          {advanced && (
+          {showAdvanced && (
             <div id="vehicle-settings" className="vehicle-grid">
               {[
                 {
@@ -190,6 +207,12 @@ export function RouteForm({
                   value: price,
                   set: setPrice,
                 },
+                {
+                  id: "savings",
+                  label: "Minimum savings per stop ($, optional)",
+                  value: savings,
+                  set: setSavings,
+                },
               ].map((f) => (
                 <div key={f.id}>
                   <label htmlFor={f.id}>{f.label}</label>
@@ -213,7 +236,8 @@ export function RouteForm({
               ))}
               <p className="input-hint">
                 Starting fuel cannot exceed range ÷ MPG. Add its price to
-                calculate whole-trip fuel cost.
+                calculate whole-trip fuel cost. Minimum savings skips stops that
+                save less than that amount; purchases may cost slightly more.
               </p>
             </div>
           )}

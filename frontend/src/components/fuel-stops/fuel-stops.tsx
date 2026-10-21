@@ -1,18 +1,40 @@
 import { Fuel, Info, MapPin } from "lucide-react";
 import type { FuelStop, OptimizeResponse } from "@/types/api";
 import { decimal, miles, usd } from "@/lib/utils/format";
-export function FuelStopCard({ stop }: { stop: FuelStop }) {
+export function FuelStopCard({
+  stop,
+  selected = false,
+  onSelect,
+}: {
+  stop: FuelStop;
+  selected?: boolean;
+  onSelect?: (id: number) => void;
+}) {
   return (
-    <article className="station-card">
-      <div className="station-title">
-        <span className="stop-number">{stop.sequence}</span>
-        <div>
-          <h3>{stop.station.name}</h3>
-          <p>
-            {stop.station.city}, {stop.station.state}
-          </p>
+    <article
+      id={`fuel-stop-${stop.station.opis_id}`}
+      className={`station-card ${selected ? "selected" : ""}`}
+    >
+      <button
+        type="button"
+        className="station-select"
+        aria-pressed={selected}
+        onClick={() => onSelect?.(stop.station.opis_id)}
+        aria-label={`Select fuel stop ${stop.sequence}: ${stop.station.name}`}
+      >
+        <div className="station-title">
+          <span className="stop-number">{stop.sequence}</span>
+          <div>
+            <h3>{stop.station.name}</h3>
+            <p>
+              {stop.station.city}, {stop.station.state}
+            </p>
+          </div>
         </div>
-      </div>
+        <span className="station-select-hint">
+          {selected ? "Selected on map" : "View on map"}
+        </span>
+      </button>
       <div className="station-mile">
         <MapPin size={13} />
         Route mile {miles(stop.route_mile)}
@@ -43,9 +65,13 @@ export function FuelStopCard({ stop }: { stop: FuelStop }) {
 export function FuelStops({
   result,
   loading,
+  selectedId = null,
+  onSelect,
 }: {
   result: OptimizeResponse | null;
   loading: boolean;
+  selectedId?: number | null;
+  onSelect?: (id: number) => void;
 }) {
   return (
     <section
@@ -61,9 +87,19 @@ export function FuelStops({
       </div>
       {result ? (
         result.fuel_plan.stops.length ? (
-          <div className="station-list">
+          <div
+            className="station-list"
+            role="region"
+            aria-label="Fuel stop cards"
+            tabIndex={0}
+          >
             {result.fuel_plan.stops.map((stop) => (
-              <FuelStopCard key={stop.station.opis_id} stop={stop} />
+              <FuelStopCard
+                key={stop.station.opis_id}
+                stop={stop}
+                selected={selectedId === stop.station.opis_id}
+                onSelect={onSelect}
+              />
             ))}
           </div>
         ) : (
@@ -99,7 +135,8 @@ export function FuelStops({
         <Info size={14} />
         <p>
           Station locations are approximate. Confirm the actual address and road
-          access before departure.
+          access before departure. Exact road access and detour distance are
+          unverified.
         </p>
       </div>
     </section>

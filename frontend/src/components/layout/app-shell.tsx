@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="sidebar-footer">
             <span className="version-dot" /> RouteFuel{" "}
             <span>
-              v0.5 <ArrowUpRight size={13} />
+              v0.6 <ArrowUpRight size={13} />
             </span>
           </div>
         </div>

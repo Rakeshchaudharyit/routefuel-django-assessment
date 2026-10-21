@@ -4,12 +4,30 @@ import test from "node:test";
 import ts from "typescript";
 async function load(path) {
   const source = await readFile(new URL(path, import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source, {
+  let compiled = ts.transpileModule(source, {
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.ES2022,
     },
   }).outputText;
+  if (path.endsWith("client.ts")) {
+    const validation = await readFile(
+      new URL("../src/lib/api/validation.ts", import.meta.url),
+      "utf8",
+    );
+    const js = ts.transpileModule(validation, {
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ES2022,
+      },
+    }).outputText;
+    compiled = compiled.replace(
+      '"./validation"',
+      JSON.stringify(
+        `data:text/javascript;base64,${Buffer.from(js).toString("base64")}`,
+      ),
+    );
+  }
   return import(
     `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`
   );
@@ -38,9 +56,14 @@ test("client request, errors, timeout and cancellation", async (t) => {
           finish: "Atlanta, GA",
           geometry_detail: "simplified",
         });
-        return Response.json({
-          fuel_plan: { summary: { total_purchase_cost: "78.41" } },
-        });
+        const fixture = JSON.parse(
+          await readFile(
+            new URL("./fixtures/optimized.json", import.meta.url),
+            "utf8",
+          ),
+        );
+        fixture.fuel_plan.summary.total_purchase_cost = "78.41";
+        return Response.json(fixture);
       };
       const response = await api.optimizeRoute({
         start: "Dallas, TX",

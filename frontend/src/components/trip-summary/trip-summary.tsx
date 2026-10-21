@@ -58,6 +58,17 @@ export function TripSummary({
         </div>
         <div>
           <dt>
+            <Fuel size={15} />
+            Fuel at destination
+          </dt>
+          <dd>
+            {summary
+              ? `${decimal(summary.fuel_remaining_at_destination_gallons)} gal`
+              : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt>
             <MapStopIcon />
             Fuel stops
           </dt>
@@ -80,7 +91,12 @@ export function TripSummary({
         </div>
       </div>
       <p className="summary-note">
-        {summary?.cost_note ||
+        {summary?.cost_note
+          .replaceAll(
+            "starting_fuel_price_per_gallon",
+            "the starting fuel price",
+          )
+          .replaceAll("total_purchase_cost", "The fuel-purchase total") ||
           "Optimize a route to see fuel purchases. Add a starting-fuel price for a whole-trip estimate."}
       </p>
       {result && (

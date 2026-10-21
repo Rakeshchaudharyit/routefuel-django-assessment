@@ -1,6 +1,6 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleAlert,
   LoaderCircle,
@@ -30,21 +30,48 @@ export function Dashboard() {
   const [error, setError] = useState<ApiError | null>(null);
   const controller = useRef<AbortController | null>(null);
   const lastRequest = useRef(0);
-  const [submitted, setSubmitted] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectFromMap = useCallback((id: number) => {
+    setSelectedId(id);
+    document
+      .getElementById(`fuel-stop-${id}`)
+      ?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, []);
+  const selectFromCard = useCallback((id: number) => {
+    setSelectedId(id);
+    document
+      .getElementById("route-map-panel")
+      ?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, []);
   useEffect(() => () => controller.current?.abort(), []);
   async function submit(request: OptimizeRequest) {
-    if (loading || Date.now() - lastRequest.current < 1100) return;
-    lastRequest.current = Date.now();
-    controller.current?.abort();
+    if (controller.current) return;
     const current = new AbortController();
     controller.current = current;
     setLoading(true);
     setError(null);
-    setResult(null);
-    setSubmitted(true);
+
     try {
+      // Queue rapid follow-up submissions so the provider's 1 request/second
+      // limit does not silently discard a deliberate user action.
+      const delay = Math.max(0, 1100 - (Date.now() - lastRequest.current));
+      if (delay > 0)
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            current.signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, delay);
+          current.signal.addEventListener("abort", finish, { once: true });
+        });
+      if (current.signal.aborted) return;
+      lastRequest.current = Date.now();
       const response = await optimizeRoute(request, current.signal);
-      if (!current.signal.aborted) setResult(response);
+      if (!current.signal.aborted) {
+        setResult(response);
+        setSelectedId(null);
+      }
     } catch (caught) {
       if (!current.signal.aborted)
         setError(
@@ -54,6 +81,7 @@ export function Dashboard() {
         );
     } finally {
       if (!current.signal.aborted) {
+        controller.current = null;
         setLoading(false);
         void refresh();
       }
@@ -108,6 +136,7 @@ export function Dashboard() {
             <RouteForm
               loading={loading}
               onSubmit={submit}
+              serverErrors={apiFieldErrors(error)}
               serverField={
                 typeof error?.details?.field === "string"
                   ? error.details.field
@@ -138,12 +167,23 @@ export function Dashboard() {
               )}
               {result && (
                 <p className="result-banner">
-                  Plan ready: {result.origin.label} → {result.destination.label}
-                  . Results are shown alongside the map.
+                  {loading || error
+                    ? "Showing previous valid plan: "
+                    : "Plan ready: "}
+                  {result.origin.label} → {result.destination.label}.
+                  {loading
+                    ? " A new plan is being calculated."
+                    : error
+                      ? " The latest request did not replace these results."
+                      : ` ${result.meta.cached ? "Cached route" : "Fresh route"} · ${result.meta.provider.toUpperCase()}.`}
                 </p>
               )}
             </div>
-            <RouteMap />
+            <RouteMap
+              result={result}
+              selectedId={selectedId}
+              onStopSelect={selectFromMap}
+            />
             <div className="workspace-note">
               <ShieldCheck size={16} />
               <span>Built for the journey ahead.</span>
@@ -152,16 +192,15 @@ export function Dashboard() {
                 engine.
               </p>
             </div>
-            {submitted && result && (
-              <p className="milestone-note">
-                Map route drawing and linked station selection are planned for
-                M6.
-              </p>
-            )}
           </div>
           <aside className="results-column" aria-label="Trip results">
             <TripSummary result={result} loading={loading} />
-            <FuelStops result={result} loading={loading} />
+            <FuelStops
+              result={result}
+              loading={loading}
+              selectedId={selectedId}
+              onSelect={selectFromCard}
+            />
           </aside>
         </div>
         <footer className="page-footer">
@@ -175,4 +214,30 @@ export function Dashboard() {
       </div>
     </AppShell>
   );
+}
+
+function apiFieldErrors(error: ApiError | null): Record<string, string> {
+  if (!error?.details) return {};
+  if (typeof error.details.field === "string")
+    return { [error.details.field]: error.message };
+  const fields: Record<string, string> = {};
+  const names: Record<string, string> = {
+    range_miles: "range",
+    starting_fuel_gallons: "fuel",
+    starting_fuel_price_per_gallon: "price",
+    min_savings_per_stop: "savings",
+  };
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return;
+    Object.entries(value).forEach(([key, entry]) => {
+      if (Array.isArray(entry))
+        fields[names[key] || key] = entry
+          .filter((item) => typeof item === "string")
+          .join(" ");
+      else if (typeof entry === "string") fields[names[key] || key] = entry;
+      else visit(entry);
+    });
+  };
+  visit(error.details);
+  return fields;
 }

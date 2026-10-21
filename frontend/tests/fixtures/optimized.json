@@ -1,0 +1,130 @@
+{
+  "origin": {
+    "label": "Dallas, TX",
+    "latitude": 32.794176,
+    "longitude": -96.765503,
+    "state": "TX",
+    "source": "census_place"
+  },
+  "destination": {
+    "label": "Atlanta, GA",
+    "latitude": 33.762909,
+    "longitude": -84.422675,
+    "state": "GA",
+    "source": "census_place"
+  },
+  "route": {
+    "distance_miles": 778.8,
+    "duration_minutes": 779.5,
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [
+          -96.765503,
+          32.794176
+        ],
+        [
+          -95.304631,
+          32.314954
+        ],
+        [
+          -84.422675,
+          33.762909
+        ]
+      ]
+    },
+    "geometry_detail": "simplified",
+    "geometry_tolerance_meters": 25.0
+  },
+  "vehicle": {
+    "range_miles": 500.0,
+    "mpg": 10.0,
+    "tank_capacity_gallons": "50.000",
+    "starting_fuel_gallons": "50.000",
+    "starting_fuel_price_per_gallon": "3.199"
+  },
+  "fuel_plan": {
+    "currency": "USD",
+    "stops": [
+      {
+        "sequence": 1,
+        "station": {
+          "opis_id": 60540,
+          "name": "CIRCLE K #2706340",
+          "address": "I-20, EXIT 533",
+          "city": "Canton",
+          "state": "TX",
+          "latitude": 32.554245,
+          "longitude": -95.863534
+        },
+        "location": {
+          "accuracy": "city",
+          "source": "census_gazetteer_places_2010",
+          "approximate": true,
+          "uncertainty_miles": 1.4,
+          "distance_from_route_miles": 3.6
+        },
+        "route_mile": 56.9,
+        "price_per_gallon": "2.77566666",
+        "gallons": "5.685",
+        "cost": "15.78",
+        "fuel_on_arrival_gallons": "44.315",
+        "fuel_on_departure_gallons": "50.000"
+      },
+      {
+        "sequence": 2,
+        "station": {
+          "opis_id": 64558,
+          "name": "MR FUEL #1203",
+          "address": "I-20, EXIT 129",
+          "city": "Meridian",
+          "state": "MS",
+          "latitude": 32.384191,
+          "longitude": -88.68944
+        },
+        "location": {
+          "accuracy": "city",
+          "source": "census_gazetteer_places_2010",
+          "approximate": true,
+          "uncertainty_miles": 4.1,
+          "distance_from_route_miles": 0.07
+        },
+        "route_mile": 496.3,
+        "price_per_gallon": "2.81233333",
+        "gallons": "22.195",
+        "cost": "62.42",
+        "fuel_on_arrival_gallons": "6.055",
+        "fuel_on_departure_gallons": "28.250"
+      }
+    ],
+    "summary": {
+      "number_of_stops": 2,
+      "total_gallons_consumed": "77.880",
+      "starting_fuel_used_gallons": "50.000",
+      "total_gallons_purchased": "27.880",
+      "total_purchase_cost": "78.20",
+      "fuel_remaining_at_destination_gallons": "0.000",
+      "starting_fuel_value": "159.95",
+      "estimated_total_fuel_cost": "238.15",
+      "estimated_total_fuel_cost_status": "calculated",
+      "cost_note": "Purchases ($78.20) plus 50.000 gal of starting fuel valued at $3.199/gal."
+    },
+    "stop_policy": null,
+    "candidates": {
+      "corridor_miles": 5.0,
+      "stations_in_search_area": 242,
+      "stations_on_route": 111
+    }
+  },
+  "meta": {
+    "provider": "osrm",
+    "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+    "cached": true,
+    "routing_requests": 0,
+    "timings_ms": {
+      "route": 1.95,
+      "station_matching": 7.11,
+      "optimization": 7.13
+    }
+  }
+}
