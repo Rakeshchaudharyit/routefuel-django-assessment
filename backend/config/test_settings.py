@@ -5,6 +5,8 @@ import os
 # Set before importing the base settings so they are never read from .env.
 os.environ["DJANGO_SECRET_KEY"] = "test-only-insecure-secret-key"  # noqa: S105
 os.environ["DJANGO_DEBUG"] = "false"
+os.environ["DJANGO_SECURE_COOKIES"] = "true"
+os.environ["ROUTEFUEL_DASHBOARD_URL"] = "http://localhost:3000"
 os.environ["DJANGO_ALLOWED_HOSTS"] = "testserver,localhost"
 os.environ["DJANGO_CORS_ALLOWED_ORIGINS"] = "http://localhost:3000"
 os.environ["ROUTING_BASE_URL"] = "https://router.example.test"

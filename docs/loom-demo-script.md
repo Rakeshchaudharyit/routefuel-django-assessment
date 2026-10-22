@@ -6,7 +6,8 @@ Rehearse once and trim pauses rather than speeding through the explanation.
 
 ## Before recording (outside the five minutes)
 
-- Start Django with imported stations and Next.js; use `http://localhost:3000`.
+- Start Django with imported stations and Next.js; open the dashboard at the origin allowed by
+  `DJANGO_CORS_ALLOWED_ORIGINS` (both `http://localhost:3000` and `http://127.0.0.1:3000` by default).
 - Import the Postman collection/environment and set `base_url`. Set Runner delay to 1100 ms.
 - Run `verify_routing` and the collection. Warm Dallas–Atlanta and New York–Los Angeles for
   reliable switching; identify cached responses honestly during the recording.
@@ -18,6 +19,17 @@ Rehearse once and trim pauses rather than speeding through the explanation.
   app, requests and source code; no secret values are needed.
 - Check that route totals still match the current provider. Use current results if they change.
   Do not call cached data a fresh routing request or claim exact station positions.
+
+### Files to have open in VS Code
+
+| File | What to point at |
+|---|---|
+| `backend/config/urls.py` | `/api/v1/` routes and the admin |
+| `backend/apps/routing/views.py` | `OptimizeRouteView` and the domain-error mapping |
+| `backend/apps/routing/services.py` | `plan_route()`: cache check, then one provider call |
+| `backend/apps/routing/fuel_plans.py` | `plan_route_with_fuel()`: route, station matching, optimization |
+| `backend/apps/optimization/optimizer.py` | `optimize()` (fuel lots and refunds) and `check_plan()` |
+| `backend/apps/fuel/models.py` | `FuelStation` and its constraints |
 
 ## 0:00–0:30 — Introduction
 
@@ -106,7 +118,7 @@ scroll or changing every field.
 
 **Say:**
 
-> “Successful routes are cached for seven days. All 416 backend and 36 frontend tests pass;
+> “Successful routes are cached for seven days. All 511 backend and 36 frontend tests pass;
 > live routing was checked separately. Stations are approximate, prices are static, and the
 > model has no fuel reserve. Thank you.”
 

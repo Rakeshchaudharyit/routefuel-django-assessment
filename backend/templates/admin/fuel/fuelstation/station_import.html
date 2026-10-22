@@ -1,0 +1,56 @@
+{% extends "admin/fuel/fuelstation/station_import_base.html" %}
+{% load humanize %}
+{% block content_title %}
+<p class="workspace-eyebrow">STATION DATA / IMPORT</p>
+<h1>Import Fuel Stations</h1>
+<p class="workspace-description">Add new stations and update existing ones from a CSV or Excel file. Nothing is saved until you review the preview and confirm.</p>
+{% endblock %}
+{% block content %}
+<div class="import-layout">
+  <section class="workspace-panel" aria-labelledby="upload-heading">
+    <div class="panel-heading">
+      <div><h2 id="upload-heading">Upload a station file</h2><p>Start from the template so the column headers match exactly.</p></div>
+      <div class="import-downloads">
+        <a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import_xlsx' %}">Download Excel template</a>
+        <a class="workspace-link" href="{% url 'admin:fuel_fuelstation_import_csv' %}">CSV header</a>
+      </div>
+    </div>
+    <form class="import-form" method="post" enctype="multipart/form-data" data-import-form novalidate>
+      {% csrf_token %}
+      <div class="import-field{% if form.file.errors %} has-error{% endif %}">
+        <label for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+        {{ form.file }}
+        <p class="import-help" id="file-help">{{ form.file.help_text }}</p>
+        {% for error in form.file.errors %}<p class="import-alert import-alert-error" role="alert">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="import-actions">
+        <button type="submit" class="import-button import-button-primary" data-busy-label="Validating…">Validate &amp; preview</button>
+        {% if has_view_permission %}<a class="workspace-link" href="{% url 'admin:fuel_fuelstation_changelist' %}">Cancel</a>{% endif %}
+      </div>
+    </form>
+  </section>
+
+  <aside class="workspace-panel import-guide" aria-labelledby="guide-heading">
+    <div class="panel-heading"><div><h2 id="guide-heading">How it works</h2><p>Matched by OPIS Truckstop ID only.</p></div></div>
+    <ol class="import-steps">
+      <li><strong>Upload.</strong> The file is checked: real CSV/XLSX content, no macros or formulas, size and row limits.</li>
+      <li><strong>Preview.</strong> Each row is classified as new, update, unchanged or invalid, with current → new values. The database is not touched.</li>
+      <li><strong>Confirm.</strong> The previewed changes are applied together in one transaction. Invalid rows are skipped and listed in a downloadable error report.</li>
+    </ol>
+    <table class="import-table import-columns">
+      <caption>Columns</caption>
+      <thead><tr><th scope="col">Column</th><th scope="col">New station</th><th scope="col">Update</th></tr></thead>
+      <tbody>
+      {% for column, new, existing, rule in field_guide %}
+        <tr><th scope="row">{{ column }}<small>{{ rule }}</small></th><td>{{ new }}</td><td>{{ existing }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <ul class="import-rules">
+      <li>Blank cells and omitted columns keep stored values; nothing is cleared.</li>
+      <li>Rows repeating an OPIS ID are merged when their location matches; otherwise all are rejected.</li>
+      <li>Coordinates are not imported. New or relocated stations are placed at their town using the offline Census gazetteer.</li>
+    </ul>
+  </aside>
+</div>
+{% endblock %}

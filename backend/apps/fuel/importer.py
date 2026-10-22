@@ -62,6 +62,10 @@ class Reason(StrEnum):
     CONFLICTING_DUPLICATE = "conflicting_duplicate"
     NON_US_STATION = "non_us_station"
     INCOMPLETE_ADDRESS = "incomplete_address"
+    # Used only by the admin spreadsheet import (apps.fuel.station_import).
+    UNSUPPORTED_VALUE = "unsupported_value"
+    VALUE_TOO_LONG = "value_too_long"
+    INCOMPLETE_NEW_STATION = "incomplete_new_station"
 
 
 @dataclass(frozen=True)

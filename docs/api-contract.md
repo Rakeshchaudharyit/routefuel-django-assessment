@@ -49,7 +49,9 @@ Other methods on these paths return `405 method_not_allowed`.
 
 ## Response (200)
 
-Abridged real response (stand-in route geometry; see README):
+Real response for `{"start": "Dallas, TX", "finish": "Atlanta, GA"}` with default vehicle
+settings, recorded live against OSRM on 22 October 2026. Only the geometry coordinates are
+shortened (the full line has 8,177 points). Results change if provider data changes.
 
 ```json
 {
@@ -57,48 +59,75 @@ Abridged real response (stand-in route geometry; see README):
   "destination": {"label": "Atlanta, GA", "latitude": 33.762909, "longitude": -84.422675, "state": "GA", "source": "census_place"},
   "route": {
     "distance_miles": 778.8,
-    "duration_minutes": 779.5,
-    "geometry": {"type": "LineString", "coordinates": [[-96.765503, 32.794176], [-95.304631, 32.314954], [-84.422675, 33.762909]]},
-    "geometry_detail": "simplified",
-    "geometry_tolerance_meters": 25.0
+    "duration_minutes": 843.9,
+    "geometry": {"type": "LineString", "coordinates": [[-96.765226, 32.793945], [-96.765446, 32.793758], "... 8,175 more [lon, lat] pairs"]},
+    "geometry_detail": "full",
+    "geometry_tolerance_meters": null
   },
-  "vehicle": {"range_miles": 500.0, "mpg": 10.0, "tank_capacity_gallons": "50.000",
-              "starting_fuel_gallons": "50.000", "starting_fuel_price_per_gallon": "3.199"},
+  "vehicle": {"range_miles": 500, "mpg": 10, "tank_capacity_gallons": "50.000",
+              "starting_fuel_gallons": "50.000", "starting_fuel_price_per_gallon": null},
   "fuel_plan": {
     "currency": "USD",
-    "stops": [{
-      "sequence": 1,
-      "station": {"opis_id": 64558, "name": "MR FUEL #1203", "address": "I-20, EXIT 129",
-                  "city": "Meridian", "state": "MS", "latitude": 32.384191, "longitude": -88.68944},
-      "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
-                   "uncertainty_miles": 4.1, "distance_from_route_miles": 0.07},
-      "route_mile": 496.3,
-      "price_per_gallon": "2.81233333",
-      "gallons": "27.880",
-      "cost": "78.41",
-      "fuel_on_arrival_gallons": "0.370",
-      "fuel_on_departure_gallons": "28.250"
-    }],
+    "stops": [
+      {"sequence": 1,
+       "station": {"opis_id": 60540, "name": "CIRCLE K #2706340", "address": "I-20, EXIT 533", "city": "Canton", "state": "TX",
+                   "latitude": 32.554245, "longitude": -95.863534},
+       "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
+                    "uncertainty_miles": 1.4, "distance_from_route_miles": 1.71},
+       "route_mile": 57.2, "price_per_gallon": "2.77566666", "gallons": "5.718", "cost": "15.87",
+       "fuel_on_arrival_gallons": "44.282", "fuel_on_departure_gallons": "50.000"},
+      {"sequence": 2,
+       "station": {"opis_id": 4463, "name": "QUIKTRIP #7901", "address": "I-20, EXIT 556 & US-69", "city": "Lindale", "state": "TX",
+                   "latitude": 32.493887, "longitude": -95.407275},
+       "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
+                    "uncertainty_miles": 1.4, "distance_from_route_miles": 1.77},
+       "route_mile": 84.5, "price_per_gallon": "2.80733333", "gallons": "2.731", "cost": "7.67",
+       "fuel_on_arrival_gallons": "47.269", "fuel_on_departure_gallons": "50.000"},
+      {"sequence": 3,
+       "station": {"opis_id": 64558, "name": "MR FUEL #1203", "address": "I-20, EXIT 129", "city": "Meridian", "state": "MS",
+                   "latitude": 32.384191, "longitude": -88.68944},
+       "location": {"accuracy": "city", "source": "census_gazetteer_places_2010", "approximate": true,
+                    "uncertainty_miles": 4.1, "distance_from_route_miles": 1.52},
+       "route_mile": 492.5, "price_per_gallon": "2.81233333", "gallons": "19.431", "cost": "54.65",
+       "fuel_on_arrival_gallons": "9.202", "fuel_on_departure_gallons": "28.633"}
+    ],
     "summary": {
-      "number_of_stops": 1,
+      "number_of_stops": 3,
       "total_gallons_consumed": "77.880",
       "starting_fuel_used_gallons": "50.000",
       "total_gallons_purchased": "27.880",
-      "total_purchase_cost": "78.41",
+      "total_purchase_cost": "78.19",
       "fuel_remaining_at_destination_gallons": "0.000",
-      "starting_fuel_value": "159.95",
-      "estimated_total_fuel_cost": "238.36",
-      "estimated_total_fuel_cost_status": "calculated",
-      "cost_note": "Purchases ($78.41) plus 50.000 gal of starting fuel valued at $3.199/gal."
+      "starting_fuel_value": null,
+      "estimated_total_fuel_cost": null,
+      "estimated_total_fuel_cost_status": "unavailable",
+      "cost_note": "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
     },
-    "stop_policy": {"min_savings_per_stop": "1.00", "stops_removed": 1, "removed_station_opis_ids": [60540],
-                    "minimum_purchase_cost": "78.20", "minimum_cost_number_of_stops": 2, "extra_cost": "0.21"},
-    "candidates": {"corridor_miles": 5.0, "stations_in_search_area": 242, "stations_on_route": 111}
+    "stop_policy": null,
+    "candidates": {"corridor_miles": 5, "stations_in_search_area": 240, "stations_on_route": 126}
   },
   "meta": {"provider": "osrm", "attribution": "Routing © OSRM; map data © OpenStreetMap contributors (ODbL)",
-           "cached": true, "routing_requests": 0,
-           "timings_ms": {"route": 1.95, "station_matching": 7.11, "optimization": 7.13}}
+           "cached": false, "routing_requests": 1,
+           "timings_ms": {"route": 947.43, "station_matching": 19.79, "optimization": 0.33}}
 }
+```
+
+With `"vehicle": {"starting_fuel_price_per_gallon": "3.00"}`, the same route returns
+`"starting_fuel_value": "150.00"`, `"estimated_total_fuel_cost": "228.19"` and
+`"estimated_total_fuel_cost_status": "calculated"`. With `"starting_fuel_gallons": 0`, it
+buys all 77.881 gallons at 5 stops for `"total_purchase_cost": "217.37"`.
+
+### Other endpoints
+
+`GET /api/v1/health/` → `200 {"status": "ok", "service": "routefuel-api"}`. It does not check the
+database or the provider.
+
+`POST /api/v1/routes/` with `{"start": "Dallas, TX", "finish": "Atlanta, GA"}` → `200` with
+`origin`, `destination`, `route` (same shape as above) and `meta` without `timings_ms`:
+
+```json
+{"meta": {"provider": "osrm", "attribution": "Routing © OSRM; map data © OpenStreetMap contributors (ODbL)",
+          "cached": true, "routing_requests": 0}}
 ```
 
 ### TypeScript shape
@@ -230,18 +259,27 @@ Every error uses one envelope:
 
 `details.field` on location errors names the input to highlight (`start` is checked first).
 
-## Loading and timeouts
+## Caching, attribution and timing
 
-| Situation | Typical server time (measured locally, stand-in provider) |
-|---|---|
-| Route already cached | ~7–15 ms (Dallas–Atlanta to coast to coast) |
-| New route | provider time + ~45–115 ms processing |
-| Public OSRM provider time | not measured from Django (blocked in the build environment); expect hundreds of ms to a few seconds |
+* Successful routes are cached in the database for `ROUTE_CACHE_TTL` (default 7 days), keyed
+  by provider and by origin and destination rounded to about 1 m. The key is
+  direction-sensitive. Errors are not cached.
+* `meta.routing_requests` is `1` for a fresh route and `0` for a cached one. No routing request
+  is made per station. Identical concurrent requests for an uncached route share one provider
+  call.
+* `meta.attribution` must be shown with the map (OSRM/OpenStreetMap terms).
 
-* Show a loading state immediately; a new route can take a few seconds on the public OSRM
-  server, and it allows only 1 request/second — debounce requests.
-* Set the client timeout to at least 15 s (server provider timeout is 10 s; the API answers
-  `504 routing_timeout` itself).
-* Identical concurrent requests are coalesced server-side (one provider call), so a retry
-  while the first request is still running is cheap.
-* `meta.cached` tells you whether the route came from the cache.
+Measured live on 22 October 2026 through the local Django server (single observations, not
+guarantees):
+
+| Request | Client total | OSRM part | Local processing |
+|---|---|---|---|
+| Dallas → Atlanta, uncached | 984 ms | 947 ms | ~20 ms station matching, 0.3 ms optimization |
+| Dallas → Atlanta, cached | 28 ms | — | — |
+| New York → Los Angeles, uncached | 3,590 ms | 3,539 ms | 29 ms matching, 0.6 ms optimization |
+| Dallas → Austin, uncached | 374 ms | 351 ms | ~14 ms |
+
+* Show a loading state immediately; uncached long routes can take several seconds on the public
+  OSRM server, which allows about 1 request per second.
+* Set the client timeout to at least 15 s. The server's provider timeout is 10 s, after which
+  the API answers `504 routing_timeout` itself.

@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block title %}Sign in | RouteFuel Administration{% endblock %}
+{% block bodyclass %}{{ block.super }} routefuel-login{% endblock %}
+{% block dark-mode-vars %}{% endblock %}
+{% block header %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block content_title %}{% endblock %}
+{% block extrahead %}{{ block.super }}<script src="{% static 'routefuel/login.js' %}" defer></script>{% endblock %}
+{% block content %}
+<section class="login-shell" aria-labelledby="login-title">
+  <header class="login-brand"><a href="{% url 'admin:index' %}" aria-label="RouteFuel administration"><span class="brand-symbol" aria-hidden="true">R</span>RouteFuel<span class="brand-dot" aria-hidden="true">.</span></a><span class="portal-label">ADMINISTRATION</span></header>
+  <div class="login-card">
+    <div class="access-label"><span aria-hidden="true"></span> STAFF ACCESS</div>
+    <h1 id="login-title">Welcome back.</h1>
+    <p class="login-intro">Sign in to your operations workspace.</p>
+    {% if form.errors %}
+    <div class="login-error" role="alert"><strong>We couldn’t sign you in.</strong><p>Enter a valid username and password for an active staff account.</p></div>
+    {% elif user.is_authenticated %}
+    <div class="login-error" role="alert">This account cannot access administration. Sign in with an authorized staff account.</div>
+    {% endif %}
+    <form action="{{ app_path }}" method="post" id="login-form">
+      {% csrf_token %}
+      <div class="login-field">{{ form.username.label_tag }}{{ form.username }}{{ form.username.errors }}</div>
+      <div class="login-field">
+        {{ form.password.label_tag }}
+        <div class="password-field">{{ form.password }}<button type="button" id="toggle-password" aria-controls="id_password" aria-pressed="false" aria-label="Show password" hidden>Show</button></div>
+        {{ form.password.errors }}
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="sign-in">Sign in <span aria-hidden="true">→</span></button>
+    </form>
+    <p class="access-note">Access is limited to authorized staff.<br>For account help, contact your administrator.</p>
+  </div>
+  <footer class="login-footer">RouteFuel <span aria-hidden="true">/</span> Operations Administration</footer>
+</section>
+{% endblock %}
+{% block footer %}{% endblock %}

@@ -4,3 +4,4 @@ djangorestframework>=3.18.3,<3.19
 django-cors-headers>=4.9,<5
 httpx>=0.28,<0.29
 python-dotenv>=1.0,<2
+openpyxl>=3.1.5,<3.2

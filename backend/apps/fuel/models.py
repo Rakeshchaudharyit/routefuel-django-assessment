@@ -1,3 +1,6 @@
+import uuid
+
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -108,3 +111,42 @@ class FuelStation(models.Model):
     @property
     def has_coordinates(self) -> bool:
         return self.latitude is not None and self.longitude is not None
+
+
+class StationImport(models.Model):
+    """One admin spreadsheet upload: the validated rows behind its preview, then the outcome.
+
+    The uploaded file itself is never stored; only the normalized rows the administrator
+    previewed, so the confirmation applies exactly that data.
+    """
+
+    class Status(models.TextChoices):
+        PREVIEWED = "previewed", "Awaiting confirmation"
+        APPLIED = "applied", "Applied"
+        STALE = "stale", "Stale (station data changed after preview)"
+        EXPIRED = "expired", "Expired"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PREVIEWED)
+    file_name = models.CharField(max_length=255)
+    file_format = models.CharField(max_length=4)
+    file_size = models.PositiveIntegerField()
+    file_sha256 = models.CharField(max_length=64)
+    # Hash of the exact changes shown in the preview; confirmation must reproduce it.
+    fingerprint = models.CharField(max_length=64)
+    rows = models.JSONField(default=list)  # normalized station records; cleared once closed
+    summary = models.JSONField(default=dict)
+    issues = models.JSONField(default=list)  # rejected rows, for the preview and error report
+    result = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["status", "created_at"], name="fuel_import_status_created")]
+
+    def __str__(self) -> str:
+        return f"{self.file_name} ({self.get_status_display()})"

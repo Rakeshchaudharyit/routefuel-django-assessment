@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -199,18 +200,31 @@ class GeolocationResult:
     unresolved_examples: list[str] = field(default_factory=list)
 
 
-def geolocate_stations(gazetteer: Gazetteer, *, force: bool = False) -> GeolocationResult:
+def geolocate_stations(
+    gazetteer: Gazetteer, *, force: bool = False, opis_ids: Collection[int] | None = None
+) -> GeolocationResult:
     """Assign city-level coordinates to unresolved stations (all city-level ones with ``force``).
 
     Address-level coordinates, if ever added, are never overwritten. Lookups are cached per
     (city, state) for the run; results persist on the rows, so reruns skip resolved stations.
+    ``opis_ids`` limits the run to those stations (the admin import passes the ones it touched).
     """
     eligible = [GeolocationAccuracy.UNRESOLVED]
     if force:
         eligible.append(GeolocationAccuracy.CITY)
-    stations = FuelStation.objects.filter(geolocation_accuracy__in=eligible).values_list(
-        "id", "city", "state", "geolocation_accuracy"
-    )
+    queryset = FuelStation.objects.filter(geolocation_accuracy__in=eligible)
+    fields = ("id", "city", "state", "geolocation_accuracy")
+    if opis_ids is None:
+        stations: Iterable[tuple[int, str, str, str]] = queryset.values_list(*fields)
+    else:
+        ids = sorted(opis_ids)
+        stations = [
+            row
+            for start in range(0, len(ids), BULK_BATCH_SIZE)
+            for row in queryset.filter(opis_id__in=ids[start : start + BULK_BATCH_SIZE])
+            .order_by("id")
+            .values_list(*fields)
+        ]
 
     result = GeolocationResult()
     cache: dict[tuple[str, str], Match] = {}

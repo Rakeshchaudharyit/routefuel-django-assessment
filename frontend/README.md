@@ -6,7 +6,7 @@ The [v1 API contract](../docs/api-contract.md) is the source of truth.
 ## Run locally
 
 Requires Node.js 20.9+ (checks ran with 20.20.2). Run commands from the repository root unless
-a `cd` is shown. Complete the [backend installation](../README.md#backend-setup) first.
+a `cd` is shown. Complete the [backend installation](../README.md#backend-installation) first.
 
 ```sh
 cd frontend
@@ -14,7 +14,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. In another terminal, start the existing backend:
+Open http://127.0.0.1:3000 (`npm run dev` binds to `127.0.0.1`; `http://localhost:3000` also works). In another terminal, start the existing backend:
 
 ```sh
 cd backend
@@ -31,8 +31,8 @@ no backend source or API contracts were modified.
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://127.0.0.1:8000`. Set it in the environment
 before starting/building Next.js if needed, or copy `.env.example` to `.env.local` in
 `frontend/` and edit the public URL. It is public configuration, never a place for
-private keys. Django must allow the browser origin in `DJANGO_CORS_ALLOWED_ORIGINS`.
-The current local configuration allows `http://localhost:3000`.
+private keys. Django must allow the browser origin in `DJANGO_CORS_ALLOWED_ORIGINS`; keep both
+`http://localhost:3000` and `http://127.0.0.1:3000` (the default in `.env.example`).
 
 ## Verify before the demonstration
 

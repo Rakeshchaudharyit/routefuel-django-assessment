@@ -1,0 +1,19 @@
+{% extends "admin/index.html" %}
+{% load humanize %}
+{% block nav-sidebar %}{% include "admin/operations_nav.html" %}{% endblock %}
+{% block coltype %}operations-overview{% endblock %}
+{% block content_title %}<p class="workspace-eyebrow">OPERATIONS / OVERVIEW</p><h1>Operations Administration</h1><p class="workspace-description">Your station data and administration, in one place.</p>{% endblock %}
+{% block content %}
+{% if station_metrics %}
+<section class="metric-grid" aria-label="Station database summary">
+  <article class="metric-card"><span>Total fuel stations</span><strong>{{ station_metrics.total|intcomma }}</strong><small>Stations in the database</small></article>
+  <article class="metric-card"><span>Approximate coordinates</span><strong>{{ station_metrics.approximate|intcomma }}</strong><small>Town-level station positions</small></article>
+  <article class="metric-card"><span>Unresolved locations</span><strong>{{ station_metrics.unresolved|intcomma }}</strong><small>Excluded from route matching</small></article>
+  <article class="metric-card"><span>US states represented</span><strong>{{ station_metrics.states|intcomma }}</strong><small>Distinct states in station data</small></article>
+</section>
+<p class="location-disclosure">Station coordinates are approximate town points. Road access and detours remain unverified.</p>
+{% endif %}
+<section class="workspace-panel" aria-labelledby="workspace-actions"><div class="panel-heading"><div><h2 id="workspace-actions">Manage your workspace</h2><p>Open the tools available to your account.</p></div><a class="workspace-link" href="{{ route_planner_url }}">Open Route Planner <span aria-hidden="true">↗</span></a></div>
+<div id="content-main" class="app-list">{% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}</div>
+</section>
+{% endblock %}

@@ -63,6 +63,29 @@ optionally loaded from `.env` at the repo root. Defaults are safe: `DEBUG` is of
 and a secret key is mandatory whenever `DEBUG` is off. Tests use `config/test_settings.py`,
 which pins every value so the suite never depends on a developer's `.env`.
 
+## Administration — post-M8 preparation
+
+The root URL redirects temporarily to `/admin/`. Native Django admin/auth/sessions/messages
+apps, middleware and template context processors provide a separate staff interface. Admin
+login uses Django's unchanged authentication form and view; custom templates, CSS and a small
+password visibility script provide RouteFuel branding. No Next.js code or API wire types change.
+
+Sessions use Django's database backend with HttpOnly, SameSite=Lax, an eight-hour age and a
+cookie path restricted to `/admin/`. Session and CSRF cookies default to Secure when DEBUG is
+off (`DJANGO_SECURE_COOKIES` controls deliberate local HTTP exceptions). Django middleware
+protects admin forms and POST logout. DRF retains empty authentication classes and AllowAny:
+an admin session never grants an API identity or changes public POST/CSRF behavior.
+
+`fuel/admin.py` registers the existing FuelStation model. Staff status admits a user to the
+site; native view/add/change/delete model permissions govern station operations. Standard
+Django admin history records administrative edits. No FuelStation migration, importer,
+optimizer or provider logic changes. Built-in admin and session migrations must be applied.
+
+Account creation uses interactive `createsuperuser` or authorized Django user administration;
+password changes use native forms or `changepassword`. Password validators are enabled.
+There is no custom hashing, default account, email reset flow, MFA or rate limiter. Deployment
+still needs HTTPS, static serving and appropriate access controls. See [enhancement report](admin-enhancement.md).
+
 ## Error handling
 
 Every DRF-handled error returns:

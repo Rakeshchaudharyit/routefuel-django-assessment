@@ -1,0 +1,7 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if has_station_import_permission %}
+  <li><a href="{% url 'admin:fuel_fuelstation_import' %}" class="importlink">Import Fuel Stations</a></li>
+  {% endif %}
+{% endblock %}

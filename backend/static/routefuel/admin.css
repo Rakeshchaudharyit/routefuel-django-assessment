@@ -1,0 +1,61 @@
+/* Native Django admin controls keep their semantics and permission behavior. */
+:root, html[data-theme="light"] {
+  --primary: #397c70;
+  --secondary: #182a38;
+  --accent: #c6e0d9;
+  --primary-fg: #fff;
+  --header-color: #fff;
+  --header-branding-color: #fff;
+  --header-bg: #182a38;
+  --header-link-color: #fff;
+  --breadcrumbs-bg: #263d4b;
+  --link-fg: #286e62;
+  --link-selected-fg: #1b544b;
+  --button-bg: #397c70;
+  --button-hover-bg: #2d665c;
+  --default-button-bg: #28675c;
+  --default-button-hover-bg: #1e5047;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+#site-name a { display: inline-flex; align-items: center; gap: 12px; font-weight: 650; letter-spacing: -.6px; }
+.brand-symbol { display: inline-grid; place-items: center; width: 34px; height: 36px; border: 1px solid #7ab5a7; border-radius: 8px; color: #8ec1b5; font-size: 21px; font-weight: 650; line-height: 1; }
+.routefuel-login { background: #f3f6f5; color: #22333d; color-scheme: light; min-height: 100vh; }
+.routefuel-login #container { width: 100%; min-width: 0; background: transparent; }
+.routefuel-login main { display: block; }
+.routefuel-login #content { margin: 0; padding: 0; width: 100%; box-sizing: border-box; }
+.routefuel-login #content-start { outline: none; }
+.login-shell { width: min(100% - 40px, 440px); margin: 0 auto; padding: 64px 0 36px; }
+.login-brand { display: flex; flex-direction: column; align-items: center; gap: 17px; margin-bottom: 32px; }
+.routefuel-login #content .login-brand a { display: inline-flex; align-items: center; gap: 12px; color: #182a38 !important; font-size: 28px; font-weight: 700; letter-spacing: -1px; text-decoration: none; }
+.login-brand .brand-symbol { background: #182a38; width: 37px; height: 40px; }
+.login-brand .brand-dot { color: #397c70; margin-left: -11px; }
+.portal-label { color: #65766e; letter-spacing: 2.2px; font-size: 10px; font-weight: 650; }
+.login-card { background: #fff; padding: 38px; border: 1px solid #dce5e1; border-radius: 14px; box-shadow: 0 12px 36px #182a3809, 0 2px 5px #182a3804; }
+.access-label { display: flex; align-items: center; gap: 7px; color: #397263; font-size: 10px; font-weight: 650; letter-spacing: 1.6px; }
+.access-label span { width: 6px; height: 6px; background: #4c8b79; border-radius: 50%; }
+.routefuel-login h1 { color: #20333e; font-size: 29px; font-weight: 650; letter-spacing: -.9px; margin: 18px 0 9px; padding: 0; line-height: 1.25; }
+.login-intro { color: #6c777c; font-size: 13px; line-height: 1.6; margin: 0 0 29px; }
+.login-field { margin: 0 0 21px; }
+.login-field label { display: block; float: none; width: auto; color: #30424b; font-size: 12px; font-weight: 600; margin: 0 0 9px; padding: 0; }
+.routefuel-login input[type="text"], .routefuel-login input[type="password"] { display: block; width: 100%; box-sizing: border-box; height: 46px; margin: 0; padding: 0 13px; border: 1px solid #ced9d5; border-radius: 6px; background: #fff; color: #22333d; font: inherit; font-size: 14px; box-shadow: inset 0 1px 2px #182a3803; }
+.password-field { position: relative; }
+.password-field input { padding-right: 65px !important; }
+#toggle-password { position: absolute; right: 5px; top: 5px; min-width: 50px; height: 36px; border: 0; border-radius: 4px; background: transparent; color: #326f62; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+#toggle-password:hover { background: #edf4f1; }
+.routefuel-login :is(input, button, a):focus-visible { outline: 3px solid #7fb5a7; outline-offset: 3px; }
+.routefuel-login input:focus { border-color: #397c70; }
+.routefuel-login .sign-in { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 47px; margin-top: 27px; padding: 0 17px; border: 1px solid #326e62; border-radius: 6px; background: #397c70; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.routefuel-login .sign-in:hover { background: #2d665c; }
+.sign-in span { font-size: 20px; font-weight: 400; }
+.access-note { margin: 24px 0 0; padding-top: 23px; border-top: 1px solid #edf0ef; text-align: center; font-size: 11px; line-height: 1.8; color: #6b777b; }
+.login-footer { text-align: center; color: #7b8988; font-size: 11px; padding-top: 27px; }
+.login-footer span { padding: 0 9px; color: #b6c4bd; }
+.login-error { padding: 13px; margin: -4px 0 23px; border: 1px solid #e8c9c0; border-radius: 6px; background: #fff6f3; color: #8b372c; font-size: 12px; line-height: 1.6; }
+.login-error p { margin: 3px 0 0; font-size: inherit; }
+.routefuel-login .errorlist { margin: 7px 0 0; padding: 0; color: #8b372c; font-size: 12px; background: transparent; }
+@media (max-width: 520px) {
+  .login-shell { width: min(100% - 32px, 440px); padding-top: 36px; }
+  .login-brand { margin-bottom: 26px; }
+  .login-card { padding: 29px 25px; border-radius: 12px; }
+  .routefuel-login h1 { font-size: 27px; }
+}

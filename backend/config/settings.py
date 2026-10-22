@@ -11,7 +11,8 @@ import math
 import os
 from pathlib import Path
 
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import URLValidator
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
@@ -86,6 +87,10 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1")
 
 INSTALLED_APPS = [
+    "apps.core.admin_apps.RouteFuelAdminConfig",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.humanize",
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.staticfiles",
@@ -102,7 +107,11 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -113,11 +122,13 @@ ASGI_APPLICATION = "config.asgi.application"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
@@ -145,7 +156,37 @@ TIME_ZONE = "UTC"
 USE_I18N = False
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Admin uses Django's database sessions and default password hashers. Public DRF views
+# retain their explicit empty authentication classes and never consume admin sessions.
+ROUTEFUEL_DASHBOARD_URL = os.environ.get("ROUTEFUEL_DASHBOARD_URL", "http://localhost:3000").strip()
+try:
+    URLValidator(schemes=["http", "https"])(ROUTEFUEL_DASHBOARD_URL)
+except ValidationError as exc:
+    raise ImproperlyConfigured("ROUTEFUEL_DASHBOARD_URL must be an HTTP(S) URL.") from exc
+LOGIN_URL = "admin:login"
+LOGIN_REDIRECT_URL = "admin:index"
+SESSION_COOKIE_NAME = "routefuel_admin_sessionid"
+SESSION_COOKIE_PATH = "/admin/"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = 8 * 60 * 60
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", default=not DEBUG)
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+CSRF_COOKIE_SAMESITE = "Lax"
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 # --------------------------------------------------------------------------
 # Django REST Framework

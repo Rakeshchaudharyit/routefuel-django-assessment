@@ -29,6 +29,22 @@ Required CSV/reference files are intentionally tracked. Reference checksums are 
 Targeted current-file and reachable-history credential scans found no token/private-key matches;
 that review is not a guarantee of an exhaustive secret scanner or dependency advisory audit.
 
+## Fuel-price CSV redistribution — decide before publishing
+
+`backend/data/fuel-prices-for-be-assessment.csv` was supplied by the employer. Its terms for
+public redistribution are not documented. It has been tracked since commit `b830597` (M1), so it
+is in the Git history, not just the current tree. The Census and Natural Earth reference files
+are public domain (see `backend/data/reference/SOURCE.md`).
+
+* **Publishing as-is** publishes the CSV and its history. Do this only if you are comfortable
+  that redistribution is allowed, for example because the employer expects it in submissions.
+* **Not publishing the CSV:** removing the file in a new commit still leaves it in earlier
+  commits. Fully excluding it means rewriting history or publishing a fresh repository
+  created from a reviewed export. Both need your explicit decision; neither was done here.
+  Alternatively, make the repository private and share access with the reviewer.
+* The README explains how to supply the CSV locally (`backend/data/` or `--file`). The test
+  suite does not depend on the full CSV.
+
 ## Create an empty public repository
 
 1. Sign in to your intended GitHub account and choose **New repository**.

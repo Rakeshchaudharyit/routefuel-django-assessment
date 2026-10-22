@@ -7,6 +7,8 @@ been pushed or uploaded, and no Loom recording has been made by this task.
 ## Verified locally
 
 - [x] Backend tests: **416 passed** in M8 (4.22 seconds).
+- [x] M9 audit (22 October 2026): backend **511 passed** after the admin and fuel-station import
+  enhancements; see [final pre-submission audit](final-pre-submission-audit.md).
 - [x] Django system check, migration drift check, Ruff lint and format checks pass.
 - [x] Frontend tests: **36 passed** (seven Node tests + 29 Vitest tests).
 - [x] TypeScript, ESLint and production webpack build pass.
@@ -35,6 +37,10 @@ been pushed or uploaded, and no Loom recording has been made by this task.
 
 ## Manual review and publication — still pending
 
+- [ ] Decide whether the employer CSV may be published (see [GitHub steps](github-readiness.md)).
+- [ ] On the Mac, rerun `npm test` (Vitest) and `npm run build`; the M9 audit environment could only
+  run TypeScript, ESLint and the seven Node tests (macOS-native build binaries).
+- [ ] Commit the uncommitted admin and import work after review (not done by the audit).
 - [ ] Review the local M7 and M8 commits and approve public publication.
 - [ ] Execute the collection's JavaScript assertions in native Postman or Newman. The terminal
   runner checks HTTP statuses only; it does not execute those assertions.

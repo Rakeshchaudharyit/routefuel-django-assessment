@@ -1,0 +1,17 @@
+<aside class="operations-sidebar" aria-label="Administration navigation">
+  <a class="operations-brand" href="{% url 'admin:index' %}"><span class="brand-symbol" aria-hidden="true">R</span>RouteFuel<span class="operations-dot">.</span></a>
+  <p class="nav-label">OPERATIONS WORKSPACE</p>
+  <nav class="operations-navigation">
+    <a href="{% url 'admin:index' %}"{% if request.resolver_match.url_name == 'index' %} aria-current="page"{% endif %}><span aria-hidden="true">▦</span> Overview</a>
+    {% for app in available_apps %}
+    <div class="operations-nav-group">
+      <p class="nav-label">{% if app.app_label == 'auth' %}USERS &amp; PERMISSIONS{% elif app.app_label == 'fuel' %}STATION DATA{% else %}{{ app.name }}{% endif %}</p>
+      {% for model in app.models %}
+      <a href="{% if model.admin_url %}{{ model.admin_url }}{% else %}{{ model.add_url }}{% endif %}"{% if opts.model_name == model.object_name|lower %} aria-current="page"{% endif %}>{% if app.app_label == 'fuel' %}<span aria-hidden="true">◇</span>{% else %}<span aria-hidden="true">○</span>{% endif %} {{ model.name }}</a>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <div class="operations-nav-group"><p class="nav-label">PLANNING</p><a href="{{ route_planner_url }}"><span aria-hidden="true">↗</span> Route Planner</a></div>
+  </nav>
+  <p class="operations-sidebar-note">RouteFuel administration<br><span>Station data &amp; access management</span></p>
+</aside>

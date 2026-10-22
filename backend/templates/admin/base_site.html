@@ -1,0 +1,11 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title }}{% endblock %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'routefuel/admin.css' %}">{% endblock %}
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}"><span class="brand-symbol" aria-hidden="true">R</span>{{ site_header }}</a></div>
+{% endblock %}
+{% block bodyclass %}{{ block.super }} routefuel-admin{% endblock %}
+{% block responsive %}{{ block.super }}<link rel="stylesheet" href="{% static 'routefuel/workspace.css' %}">{% endblock %}
+{% block nav-sidebar %}{% if has_permission and not is_popup %}{% include "admin/operations_nav.html" %}{% endif %}{% endblock %}
+{% block nav-global %}{% endblock %}

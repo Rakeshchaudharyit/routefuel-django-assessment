@@ -1,0 +1,120 @@
+{% extends "admin/fuel/fuelstation/station_import_base.html" %}
+{% load humanize %}
+{% block crumb %}<a href="{% url 'admin:fuel_fuelstation_import' %}">Import</a> &rsaquo; {% if station_import.status == "applied" %}Results{% else %}Preview{% endif %}{% endblock %}
+{% block content_title %}
+<p class="workspace-eyebrow">STATION DATA / IMPORT {% if station_import.status == "applied" %}RESULTS{% else %}PREVIEW{% endif %}</p>
+<h1>{{ title }}</h1>
+<p class="workspace-description"><span class="import-file">{{ station_import.file_name }}</span> · {{ station_import.file_format|upper }} · {{ station_import.file_size|filesizeformat }} · uploaded {{ station_import.created_at|naturaltime }}</p>
+{% endblock %}
+{% block content %}
+
+{% if station_import.status == "applied" %}
+<section class="import-banner import-banner-success" aria-labelledby="result-heading">
+  <h2 id="result-heading">Import applied</h2>
+  <p>{{ result.inserted|intcomma }} new and {{ result.updated|intcomma }} updated station{{ result.updated|pluralize }} {{ result.inserted|add:result.updated|pluralize:"was,were" }} saved in one transaction in {{ result.duration_ms|floatformat:0|intcomma }} ms.
+  {% if result.geolocation == "applied" %}{% if result.geolocated or result.left_unresolved %} {{ result.geolocated|intcomma }} new or relocated station{{ result.geolocated|pluralize }} {{ result.geolocated|pluralize:"was,were" }} placed at their town; {{ result.left_unresolved|intcomma }} {{ result.left_unresolved|pluralize:"remains,remain" }} unresolved and excluded from routing until located.{% endif %}{% else %} The offline gazetteer was unavailable, so new or relocated stations remain unresolved.{% endif %}</p>
+</section>
+<section class="metric-grid import-metrics" aria-label="Import results">
+  <article class="metric-card"><span>Rows processed</span><strong>{{ result.total_rows|intcomma }}</strong><small>Non-blank data rows</small></article>
+  <article class="metric-card"><span>Inserted</span><strong>{{ result.inserted|intcomma }}</strong><small>New stations</small></article>
+  <article class="metric-card"><span>Updated</span><strong>{{ result.updated|intcomma }}</strong><small>Changed fields only</small></article>
+  <article class="metric-card"><span>Unchanged</span><strong>{{ result.unchanged|intcomma }}</strong><small>Skipped, no write</small></article>
+  <article class="metric-card"><span>Rejected rows</span><strong>{{ result.rejected|intcomma }}</strong><small>Not imported</small></article>
+  <article class="metric-card"><span>Duplicate rows</span><strong>{{ result.duplicate_rows|intcomma }}</strong><small>Merged or rejected</small></article>
+</section>
+<div class="import-actions import-actions-spaced">
+  {% if has_view_permission %}<a class="import-button import-button-primary" href="{% url 'admin:fuel_fuelstation_changelist' %}">View fuel stations</a>{% endif %}
+  <a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import' %}">Import another file</a>
+</div>
+
+{% else %}
+
+{% if station_import.status == "stale" %}
+<section class="import-banner import-banner-error" role="alert"><h2>Preview out of date</h2><p>Station data changed after this preview was created, so nothing was imported. Upload the file again to review the current changes.</p><a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import' %}">Upload again</a></section>
+{% elif station_import.status == "expired" or expired %}
+<section class="import-banner import-banner-error" role="alert"><h2>Preview expired</h2><p>Previews can be confirmed for {{ ttl_minutes }} minutes. Upload the file again to review the current changes.</p><a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import' %}">Upload again</a></section>
+{% endif %}
+
+<section class="metric-grid import-metrics" aria-label="Preview summary">
+  <article class="metric-card"><span>Total rows</span><strong>{{ summary.total_rows|intcomma }}</strong><small>{{ summary.stations_in_file|intcomma }} distinct station{{ summary.stations_in_file|pluralize }}</small></article>
+  <article class="metric-card metric-new"><span>New stations</span><strong>{{ summary.new|intcomma }}</strong><small>Will be created</small></article>
+  <article class="metric-card metric-update"><span>Updates</span><strong>{{ summary.updates|intcomma }}</strong><small>Existing stations with changes</small></article>
+  <article class="metric-card"><span>Unchanged</span><strong>{{ summary.unchanged|intcomma }}</strong><small>Skipped, no write</small></article>
+  <article class="metric-card metric-invalid"><span>Invalid rows</span><strong>{{ summary.invalid_rows|intcomma }}</strong><small>Will be skipped</small></article>
+  <article class="metric-card"><span>Duplicate rows</span><strong>{{ summary.duplicate_rows|intcomma }}</strong><small>{{ summary.duplicate_rows_merged|intcomma }} merged · {{ summary.conflicting_duplicate_rows|intcomma }} conflicting</small></article>
+</section>
+
+<p class="location-disclosure">Columns read: {{ summary.columns|join:", " }}. Blank cells and omitted columns keep stored values.{% for note in summary.notes %} {{ note }}{% endfor %}</p>
+
+{% if updates %}
+<section class="workspace-panel import-section" aria-labelledby="updates-heading">
+  <div class="panel-heading"><div><h2 id="updates-heading">Changes to existing stations</h2><p>{% if summary.updates > sample_size %}First {{ sample_size }} of {{ summary.updates|intcomma }}.{% else %}{{ summary.updates|intcomma }} station{{ summary.updates|pluralize }}.{% endif %} Only the fields listed change.</p></div></div>
+  <div class="import-table-wrap"><table class="import-table">
+    <thead><tr><th scope="col">Station</th><th scope="col">Current → New</th></tr></thead>
+    <tbody>
+    {% for update in updates %}
+      <tr>
+        <th scope="row"><span class="import-station">{{ update.name }}</span><small>OPIS {{ update.opis_id }}</small></th>
+        <td><ul class="import-diff">
+          {% for change in update.changes %}<li><span class="diff-label">{{ change.label }}</span> <span class="diff-old">{{ change.old }}</span> <span aria-hidden="true">→</span><span class="visually-hidden"> to </span> <span class="diff-new">{{ change.new }}</span></li>{% endfor %}
+          {% if update.relocate %}<li class="diff-note">Location changed: {% if update.had_coordinates %}current coordinates are removed and re-derived for the new town.{% else %}station will be located from the new town.{% endif %}</li>{% endif %}
+        </ul></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if creates %}
+<section class="workspace-panel import-section" aria-labelledby="creates-heading">
+  <div class="panel-heading"><div><h2 id="creates-heading">New stations</h2><p>{% if summary.new > sample_size %}First {{ sample_size }} of {{ summary.new|intcomma }}.{% else %}{{ summary.new|intcomma }} station{{ summary.new|pluralize }}.{% endif %} Located at their town after import when the gazetteer finds it.</p></div></div>
+  <div class="import-table-wrap"><table class="import-table">
+    <thead><tr><th scope="col">OPIS ID</th><th scope="col">Name</th><th scope="col">Address</th><th scope="col">City</th><th scope="col">State</th><th scope="col">Rack</th><th scope="col">Price</th></tr></thead>
+    <tbody>
+    {% for create in creates %}
+      <tr><td>{{ create.opis_id }}</td><td>{{ create.name }}</td><td>{{ create.address|default:"—" }}</td><td>{{ create.city }}</td><td>{{ create.state }}</td><td>{{ create.rack_id }}</td><td class="price-usd">{{ create.price }}{% if create.price_observations > 1 %}<small> lowest of {{ create.price_observations }}</small>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% endif %}
+
+{% if issues %}
+<section class="workspace-panel import-section" aria-labelledby="issues-heading">
+  <div class="panel-heading">
+    <div><h2 id="issues-heading">Invalid rows</h2><p>{% if issue_count > max_listed_issues %}First {{ max_listed_issues }} of {{ issue_count|intcomma }}. {% endif %}These rows are not imported.</p></div>
+    <a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import_errors' station_import.pk %}">Download error report (CSV)</a>
+  </div>
+  <div class="import-table-wrap"><table class="import-table">
+    <thead><tr><th scope="col">Row</th><th scope="col">OPIS ID</th><th scope="col">Reason</th><th scope="col">Detail</th></tr></thead>
+    <tbody>
+    {% for issue in issues %}
+      <tr><td>{{ issue.line }}</td><td>{{ issue.opis_id|default:"—" }}</td><td><span class="status-badge status-unresolved">{{ issue.label }}</span></td><td>{{ issue.detail }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if station_import.status == "previewed" and not expired %}
+<section class="import-confirm" aria-labelledby="confirm-heading">
+  {% if missing_permissions %}
+    <div><h2 id="confirm-heading">Confirmation unavailable</h2><p>You do not have permission to {{ missing_permissions|join:" or " }}. Ask an administrator to grant it, or upload a file without those changes.</p></div>
+  {% elif not has_changes %}
+    <div><h2 id="confirm-heading">Nothing to import</h2><p>Every valid row matches the stored data. No changes are needed.</p></div>
+    <a class="import-button import-button-secondary" href="{% url 'admin:fuel_fuelstation_import' %}">Upload another file</a>
+  {% else %}
+    <div><h2 id="confirm-heading">Confirm import</h2><p>{{ summary.new|intcomma }} new and {{ summary.updates|intcomma }} updated station{{ summary.updates|pluralize }} will be saved together in one transaction.{% if summary.invalid_rows %} {{ summary.invalid_rows|intcomma }} invalid row{{ summary.invalid_rows|pluralize }} will be skipped.{% endif %} This preview stays valid for {{ ttl_minutes }} minutes and can be confirmed once.</p></div>
+    <form method="post" action="{% url 'admin:fuel_fuelstation_import_confirm' station_import.pk %}" class="import-actions" data-import-form>
+      {% csrf_token %}
+      <input type="hidden" name="fingerprint" value="{{ station_import.fingerprint }}">
+      <a class="workspace-link" href="{% url 'admin:fuel_fuelstation_import' %}">Cancel</a>
+      <button type="submit" class="import-button import-button-primary" data-busy-label="Importing…">Confirm import</button>
+    </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
