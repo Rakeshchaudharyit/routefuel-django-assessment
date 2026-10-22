@@ -204,7 +204,10 @@ and results persist on the rows, so later runs only look at unresolved stations.
 
 Writes are grouped by outcome (one `UPDATE … WHERE id IN (…)` per matched place). Measured on
 the full dataset, that took the write step from **7.12 s** (Django `bulk_update`, which emits
-per-row `CASE` expressions) to **0.85 s**.
+per-row `CASE` expressions) to **0.85 s**. That holds for local SQLite only. On a networked
+database (Neon) each per-place `UPDATE` is a round trip: ~3,500 of them took minutes inside one
+transaction, so PostgreSQL writes the same values with `bulk_update` (one statement per 500
+stations). Results are identical on both engines; `fuel_data_report` fingerprints prove it.
 
 ### Limitations — read before trusting a coordinate
 

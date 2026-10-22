@@ -92,6 +92,29 @@ The import is idempotent: rerunning it reports `Inserted 0, Updated 0, Unchanged
 geolocation only reconsiders the 398 unresolved stations without changing them. Stations that
 exist in the database but not in the file are kept, never deleted.
 
+### Verify and repair geolocation (read-only first)
+
+`fuel_data_report` never writes (it runs in a read-only transaction) and never prints the
+connection URL. Its fingerprints match between databases holding identical data:
+
+```
+python manage.py fuel_data_report
+```
+
+A complete import shows `Total 6626`, `With coordinates 6228`, `Unresolved 398`,
+`Unresolved the gazetteer resolves: 0`, `Station data 2dd9baab5941d60b` and
+`Geolocation 0f5ceed8d22bf3bb`. If `Unresolved the gazetteer resolves` is above 0, the
+geolocation step never committed (for example an interrupted run). Preview, then repair:
+
+```
+python manage.py geolocate_stations --dry-run   # writes nothing
+python manage.py geolocate_stations             # only touches unresolved stations
+python manage.py fuel_data_report               # confirm the fingerprints above
+```
+
+The repair is idempotent, never changes prices or station details, never touches
+address-level coordinates, and leaves the 398 stations the gazetteer cannot place unresolved.
+
 When finished:
 
 ```

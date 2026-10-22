@@ -6,6 +6,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser, OutputWrapper
+from django.db import transaction
 
 from apps.fuel.geolocation import Gazetteer, GazetteerError, GeolocationResult, geolocate_stations
 from apps.fuel.models import FuelStation, GeolocationAccuracy
@@ -38,6 +39,9 @@ class Command(BaseCommand):
         parser.add_argument(
             "--force", action="store_true", help="Recompute existing city-level coordinates too."
         )
+        parser.add_argument(
+            "--dry-run", action="store_true", help="Report what would change; write nothing."
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         path: Path = options["gazetteer"] or settings.GAZETTEER_PLACES_PATH
@@ -46,5 +50,10 @@ class Command(BaseCommand):
             gazetteer = Gazetteer.from_file(path)
         except GazetteerError as exc:
             raise CommandError(str(exc)) from exc
-        result = geolocate_stations(gazetteer, force=options["force"])
-        write_geolocation_report(self.stdout, result, time.perf_counter() - started)
+        with transaction.atomic():
+            result = geolocate_stations(gazetteer, force=options["force"])
+            if options["dry_run"]:
+                self.stdout.write("DRY RUN: the totals below are rolled back; nothing is written.")
+            write_geolocation_report(self.stdout, result, time.perf_counter() - started)
+            if options["dry_run"]:
+                transaction.set_rollback(True)

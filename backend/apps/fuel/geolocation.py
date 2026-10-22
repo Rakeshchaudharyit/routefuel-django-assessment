@@ -17,10 +17,11 @@ import re
 import unicodedata
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from apps.fuel.models import FuelStation, GeolocationAccuracy, GeolocationSource
@@ -253,13 +254,33 @@ def geolocate_stations(
             updates.setdefault(None, []).append(station_id)
 
     result.distinct_places_looked_up = len(cache)
-    now = timezone.now()
-    with transaction.atomic():
-        for place, ids in updates.items():
-            for start in range(0, len(ids), BULK_BATCH_SIZE):
-                batch = FuelStation.objects.filter(pk__in=ids[start : start + BULK_BATCH_SIZE])
-                batch.update(**_geolocation_values(place), updated_at=now)
+    _write_geolocation(updates, timezone.now())
     return result
+
+
+def _write_geolocation(updates: dict[Place | None, list[int]], now: datetime) -> None:
+    """Persist all outcomes in one transaction. Every backend gets identical values.
+
+    Only the statement shape differs. On local SQLite one ``UPDATE ... WHERE id IN (...)`` per
+    place is fastest. On a networked database (Neon) each of those ~3,500 statements is a
+    round trip, which took minutes and left a long transaction exposed to interruption, so
+    ``bulk_update`` writes the same values with one statement per batch of stations.
+    """
+    with transaction.atomic():
+        if connection.vendor == "sqlite":
+            for place, ids in updates.items():
+                for start in range(0, len(ids), BULK_BATCH_SIZE):
+                    batch = FuelStation.objects.filter(pk__in=ids[start : start + BULK_BATCH_SIZE])
+                    batch.update(**_geolocation_values(place), updated_at=now)
+            return
+        stations = [
+            FuelStation(pk=station_id, updated_at=now, **_geolocation_values(place))
+            for place, ids in updates.items()
+            for station_id in ids
+        ]
+        FuelStation.objects.bulk_update(
+            stations, [*_geolocation_values(None), "updated_at"], batch_size=BULK_BATCH_SIZE
+        )
 
 
 def _geolocation_values(place: Place | None) -> dict[str, object]:
