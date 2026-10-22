@@ -74,3 +74,28 @@ describe("wire-format validation", () => {
     ).toBe(false);
   });
 });
+
+it("accepts a negative cent-rounded practical-policy delta without allowing negative purchase costs", async () => {
+  // Equal exact fuel costs can have different sums after per-stop cent rounding.
+  const value = {
+    ...fixture,
+    fuel_plan: {
+      ...structuredClone(fixture.fuel_plan),
+      stop_policy: {
+        min_savings_per_stop: "0.10",
+        stops_removed: 1,
+        removed_station_opis_ids: [999],
+        minimum_purchase_cost: "78.21",
+        minimum_cost_number_of_stops: 3,
+        extra_cost: "-0.01",
+      },
+    },
+  };
+  expect(validOptimizeResponse(value)).toBe(true);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(value)));
+  const result = await optimizeRoute({ start: "Dallas, TX", finish: "Atlanta, GA" });
+  expect(result.fuel_plan.stop_policy?.extra_cost).toBe("-0.01");
+  vi.unstubAllGlobals();
+  value.fuel_plan.summary.total_purchase_cost = "-0.01";
+  expect(validOptimizeResponse(value)).toBe(false);
+});

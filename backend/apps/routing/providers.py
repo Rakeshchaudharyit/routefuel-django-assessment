@@ -201,7 +201,7 @@ def _route_from_osrm(body: dict[str, Any], *, provider: str) -> Route:
         geometry = route["geometry"]
         coordinates = geometry["coordinates"]
         geometry_type = geometry["type"]
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
+    except (KeyError, IndexError, TypeError, ValueError, OverflowError) as exc:
         raise RoutingProviderError("The routing provider response is missing route data.") from exc
 
     if not (math.isfinite(distance) and math.isfinite(duration)) or distance < 0 or duration < 0:
@@ -210,7 +210,7 @@ def _route_from_osrm(body: dict[str, Any], *, provider: str) -> Route:
         raise RoutingProviderError("The routing provider returned invalid route geometry.")
     try:
         positions = [[float(lon), float(lat)] for lon, lat in coordinates]
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise RoutingProviderError("The routing provider returned invalid route geometry.") from exc
     if not all(-180 <= lon <= 180 and -90 <= lat <= 90 for lon, lat in positions):
         raise RoutingProviderError("The routing provider returned out-of-range coordinates.")

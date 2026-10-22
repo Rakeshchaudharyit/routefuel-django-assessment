@@ -195,6 +195,14 @@ practical plan, and `fuel_plan.stop_policy` reports the minimum-cost alternative
 cost. It is a greedy rule, not an exact "fuel + per-stop cost" optimum. Without it,
 `stop_policy` is `null` and the plan is the minimum-purchase-cost plan.
 
+Gallons are display-rounded to 0.001 per stop; replay validation uses raw quantities. The sum
+of displayed purchases can differ slightly from consumed minus starting fuel (0.002 gal in
+the M7 17-stop example). Positive tiny purchases can display as `0.000` gallons. The default
+objective minimizes continuous purchase cost, not the sum after line-by-line cent rounding.
+`extra_cost` is a signed decimal string: effectively equal exact-cost plans can produce
+`"-0.01"` after different per-stop rounding. Purchase costs and prices remain nonnegative.
+Range and MPG must also derive a finite, positive capacity; overflow/underflow returns 400.
+
 ## Errors
 
 Every error uses one envelope:

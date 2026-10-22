@@ -4,18 +4,19 @@ A Django REST API that plans a driving route between two US locations and recomm
 buy fuel so the trip costs as little as possible. Built as the backend assessment for the
 Backend Django Engineer role at Spotter AI.
 
-> **Status:** M0–M4 implemented (foundation, fuel data, routing, fuel optimisation, API
-> performance and integration readiness). **Not yet verified against the live OSRM server from
-> Django:** every routing provider is blocked by the build environment's egress policy. Run
-> `python manage.py verify_routing` on a normal network before relying on live results — see
-> [Live routing check](#live-routing-check).
+> **Status:** M0–M7 implemented and audited locally. Live OSRM routes were verified through
+> Django and the dashboard on 22 October 2026. M8 has not started; nothing has been pushed.
+> See the [M7 QA report](docs/m7-final-qa-report.md) for tests, measurements and limitations.
 >
-> Frontend contract: [docs/api-contract.md](docs/api-contract.md) ·
-> Postman: [docs/postman/](docs/postman/) · Milestones: [docs/milestones.md](docs/milestones.md)
+> **Station markers are town-level approximations, not verified pump locations.** Road access,
+> detours and truck restrictions are unverified. Prices are a static dataset. The fuel model has
+> no reserve and may arrive empty; confirm actual stops and fuel margins before travel.
+>
+> [API contract](docs/api-contract.md) · [Postman](docs/postman/) · [Milestones](docs/milestones.md)
 
 ## Assessment requirements
 
-The finished API will:
+The API and dashboard:
 
 1. Accept start and finish locations within the USA.
 2. Calculate a driving route between them.
@@ -50,9 +51,9 @@ git clone <repo-url> routefuel
 cd routefuel
 cp .env.example .env            # then edit DJANGO_SECRET_KEY
 
-cd backend
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
+cd backend
 pip install -r requirements-dev.txt
 python manage.py migrate                 # also creates the route cache table
 python manage.py import_fuel_prices      # load the CSV + offline geolocation (~2 s)
@@ -75,7 +76,7 @@ Real environment variables take precedence over `.env`.
 | `ROUTE_CACHE_TTL` | `604800` (7 days) | Seconds a successful route stays cached (must be > 0) |
 | `FUEL_CORRIDOR_MILES` | `5` | A station is a candidate if its point is within this distance of the route **plus** its own location uncertainty (must be > 0) |
 
-Invalid values (e.g. `DJANGO_DEBUG=maybe`, `ROUTING_TIMEOUT=0`, `ROUTE_CACHE_TTL=-1`) fail fast at startup with a clear message.
+Non-finite floating-point settings are rejected. Invalid values (e.g. `DJANGO_DEBUG=maybe`, `ROUTING_TIMEOUT=0`, `ROUTE_CACHE_TTL=-1`) fail fast at startup with a clear message.
 
 ## Running Django
 
@@ -115,8 +116,9 @@ cached) and `POST /api/v1/routes/optimize/`, and marks each check PASS/FAIL (exi
 failure). It makes at most two provider requests, 1.1 s apart. Expected Dallas → Atlanta
 distance: ~778.8 mi (what the public OSRM server returned for these points on 2026-10-21).
 
-In the build environment it stops at step 1 with `routing_unavailable` (the egress proxy answers
-`403 Forbidden` to the connection), so the live path has not been exercised there.
+The historical M2–M4 network block no longer reproduces locally. M7 independently reproduced
+Dallas–Atlanta (778.8 mi, three stops, $78.19 purchases) and New York–Los Angeles
+(2,810.37 mi, 17 stops, $698.65). Results depend on provider data and the imported CSV.
 
 ## Benchmarks
 
@@ -207,8 +209,8 @@ curl -s -X POST http://127.0.0.1:8000/api/v1/routes/ \
   -d '{"start": {"latitude": 32.7767, "longitude": -96.797}, "finish": {"latitude": 33.749, "longitude": -84.388}}'
 ```
 
-Response (`200`). Distance and duration below are what the public OSRM server returned for this
-pair on 2026-10-21; the geometry is shortened here — the real one has the full road path:
+Response (`200`), illustrative historical values; geometry is abbreviated. Current M7 live
+Dallas–Atlanta distance is 778.8 miles; provider results can change:
 
 ```json
 {
@@ -298,7 +300,11 @@ Same `start`/`finish` as `/routes/`, plus an optional `vehicle` (all fields opti
 
 Optional `stop_policy: {"min_savings_per_stop": "2.00"}` drops stops that save less than that
 amount (re-optimising after each removal) and reports the extra cost against the minimum-cost
-plan in `fuel_plan.stop_policy`. Without it the plan minimises money spent at stops.
+plan in `fuel_plan.stop_policy`. The default minimises continuous purchase cost before display
+rounding, not stop count or rounded-cent totals. The policy is greedy: it can stop above the
+minimum feasible number of stops. On the live New York–Los Angeles route, a $2 threshold
+returns 11 stops for $700.74 (+$2.09); five stops suffice in the approximate candidate model.
+Rounded `extra_cost` can be negative by a cent for effectively equal exact costs.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/v1/routes/optimize/ \
@@ -362,6 +368,9 @@ different stations:
 
 **Reading the numbers**
 
+* Gallons are rounded to 0.001 per stop. Their sum can differ from full-precision consumption
+  by small rounding amounts (0.002 gal on the live 17-stop route). Replay validation uses raw
+  quantities; displayed values are not exact physical instructions.
 * `total_gallons_consumed` = route miles ÷ mpg (778.8 ÷ 10 = 77.88).
 * Starting fuel is used first (it is already paid for): `starting_fuel_used_gallons` =
   min(starting fuel, consumed); `total_gallons_purchased` = consumed − starting fuel used.
@@ -388,6 +397,23 @@ different stations:
 
 All `/routes/` errors apply too. A plan is only returned after it has been replayed mile by
 mile and checked (tank never below 0 or above capacity, stops in route order).
+
+## Running the dashboard
+
+With Django running and stations imported, open another terminal:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://localhost:3000`. The API defaults to `http://127.0.0.1:8000`;
+`NEXT_PUBLIC_API_BASE_URL` overrides it. Allow the browser origin in Django CORS settings.
+Run `npm test`, `npm run typecheck`, `npm run lint` and `npm run build` in `frontend/`.
+The current suite has 416 backend tests and 36 frontend tests. Unit tests use mocks;
+[M7 live evidence](docs/qa/m7-live-results.json) and browser checks are separate.
+See [frontend setup](frontend/README.md) for map dependencies and behavior.
 
 ## Project structure
 

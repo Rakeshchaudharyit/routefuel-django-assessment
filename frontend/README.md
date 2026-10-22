@@ -1,4 +1,4 @@
-# RouteFuel dashboard · M6
+# RouteFuel dashboard · M7 QA
 
 Next.js App Router, React, strict TypeScript, Tailwind CSS, MapLibre GL JS and Lucide.
 The [v1 API contract](../docs/api-contract.md) is the source of truth.
@@ -97,4 +97,8 @@ remain visible. Station coordinates are approximate Census town points; dashed u
 areas use the API's town-size estimate, not a verified pump position, road detour or guaranteed
 error boundary. Confirm actual road access before departure. Fuel prices are a static snapshot.
 
-M7 has not been started. Historical M5 details remain in [its report](../docs/m5-frontend-report.md).
+M7 checks pass: 36 tests (seven Node tests plus 29 Vitest tests), TypeScript, lint and production
+build. Real browser verification includes the 17-stop route, the 11-stop practical option,
+zero-stop routes, two-way selection, starting-fuel valuation and preserved results after errors.
+See [M7 QA](../docs/m7-final-qa-report.md). Historical M5 details remain in
+[its report](../docs/m5-frontend-report.md).

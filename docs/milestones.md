@@ -11,7 +11,7 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 | M4 | API Validation & Performance | Claude | ✅ |
 | M5 | Professional SaaS Dashboard | Codex | ✅ |
 | M6 | Interactive Map & API Integration | Codex | ✅ |
-| M7 | Testing & Independent Code Review | Claude + Codex | ⬜ |
+| M7 | Testing & Independent Code Review | Codex | ✅ |
 | M8 | GitHub, Postman & Loom Submission | Rakesh | ⬜ |
 
 ## M0 — Django Foundation
@@ -173,11 +173,21 @@ were both verified; browser routes and marker/card interaction were checked inde
 **Quality:** 35 passing frontend tests (seven preserved M5 tests plus 28 deterministic M6 tests);
 strict TypeScript, ESLint and production build. Browser checks at 1440, 1280, 768 and 390 px.
 See [M6 integration report](m6-integration-report.md) for evidence, limits and acceptance.
-M7 remains not started.
+M6 preserved separately in local commit `49b4c19`.
 
 ## M7 — Testing & Independent Code Review
 
-Coverage review, edge cases, a fresh-eyes code review, fixes.
+Completed locally on 22 October 2026. Backend: 416 tests, system/migration checks and Ruff pass.
+Frontend: 36 tests, TypeScript, ESLint and production build pass. Live OSRM reproduced both
+long routes plus Dallas–Austin; fresh calls and cached requests were counted independently.
+Postman stdlib runner: 8/8 HTTP statuses against real Django/provider results (JavaScript
+assertions require Postman/Newman). Browser checks cover real maps and mobile selection.
+Fixed numeric overflow handling, invalid floating configuration and signed rounded policy
+cost deltas; optimizer logic unchanged. Added 300 thousandth-gallon reference-DP cases.
+
+See [M7 report](m7-final-qa-report.md) for evidence and known limits. This was a Codex audit
+against an independently formulated reference solver; no separate Claude/human sign-off is
+claimed. M8 remains unstarted; nothing pushed.
 
 ## M8 — GitHub, Postman & Loom Submission
 

@@ -7,6 +7,7 @@ loaded from a ``.env`` file at the repository root). See ``.env.example``.
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
@@ -48,8 +49,8 @@ def env_float(name: str, default: float) -> float:
         value = float(raw)
     except ValueError as exc:
         raise ImproperlyConfigured(f"{name} must be a number, got {raw!r}.") from exc
-    if value <= 0:
-        raise ImproperlyConfigured(f"{name} must be greater than zero, got {raw!r}.")
+    if not math.isfinite(value) or value <= 0:
+        raise ImproperlyConfigured(f"{name} must be finite and greater than zero, got {raw!r}.")
     return value
 
 

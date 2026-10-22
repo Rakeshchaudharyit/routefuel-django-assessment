@@ -11,6 +11,9 @@ const integer: Check = (value) => nonnegative(value) && Number.isInteger(value);
 const bool: Check = (value) => typeof value === "boolean";
 const decimal: Check = (value) =>
   typeof value === "string" && /^\d+(\.\d+)?$/.test(value);
+// A policy delta can be negative by a cent after per-stop rounding of equal exact costs.
+const signedDecimal: Check = (value) =>
+  typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value);
 const nullable =
   (check: Check): Check =>
   (value) =>
@@ -128,7 +131,7 @@ const validPlan = shape({
         removed_station_opis_ids: array(integer),
         minimum_purchase_cost: decimal,
         minimum_cost_number_of_stops: integer,
-        extra_cost: decimal,
+        extra_cost: signedDecimal,
       }),
     ),
     candidates: shape({

@@ -61,7 +61,7 @@ class LocationField(serializers.Field):
                 errors[key] = ["This field is required."]
             elif isinstance(value, bool) or not isinstance(value, int | float):
                 errors[key] = ["A number is required."]
-            elif not math.isfinite(value) or not low <= value <= high:
+            elif not low <= value <= high or not math.isfinite(value):
                 errors[key] = [f"{key.capitalize()} must be between {low:g} and {high:g}."]
             else:
                 values[key] = float(value)
@@ -88,10 +88,17 @@ _VEHICLE_KEYS = {"range_miles", "mpg", "starting_fuel_gallons", "starting_fuel_p
 
 
 def _strict_number(value: Any, name: str, errors: dict[str, list[str]]) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         errors[name] = ["A number is required."]
         return None
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        number = float("inf")
+    if not math.isfinite(number):
+        errors[name] = ["A finite number is required."]
+        return None
+    return number
 
 
 class VehicleField(serializers.Field):
@@ -123,6 +130,9 @@ class VehicleField(serializers.Field):
                 mpg = value
 
         capacity = range_miles / mpg
+        if not math.isfinite(capacity) or capacity <= 0:
+            errors["mpg"] = ["Range and MPG must produce a finite, positive tank capacity."]
+            raise serializers.ValidationError(errors)
         starting_fuel = capacity
         if "starting_fuel_gallons" in data:
             value = _strict_number(data["starting_fuel_gallons"], "starting_fuel_gallons", errors)

@@ -1,5 +1,9 @@
 # RouteFuel — Architecture
 
+Current verification: [M7 QA, 22 October 2026](m7-final-qa-report.md). Live OSRM succeeds locally;
+network-block notes below describe historical M2–M4 measurements. Station positions remain
+approximate town points, with no verified access, detours or reserve fuel.
+
 ## Goal
 
 Given a start and finish in the USA, return a driving route (map-ready geometry) plus the
@@ -205,7 +209,7 @@ box padded by 10 miles returns 1,093 of 6,228 candidates in a median **4.4 ms**,
 the `fuel_station_lat_lng` index. Call `.order_by()` to skip the model's default ordering when
 order doesn't matter.
 
-Planned M3 matching (not implemented):
+Implemented M3 matching (see the optimisation section for route boxes and thinning):
 
 1. Pad the route's bounding box by corridor width + max uncertainty and run one indexed query.
 2. In memory, compute each candidate's distance to the route polyline (point-to-segment on a local
@@ -390,8 +394,10 @@ Unrolled, this is the classical rule for a fixed route: at a station, if a cheap
 within one tank's range, buy only enough to reach the first such station; otherwise fill the
 tank (and burn this fuel until something cheaper appears). That rule is optimal for a fixed
 path with linear consumption and one tank capacity (Khuller, Malekian & Mestre, *To fill or not
-to fill: the gas station problem*, ACM Trans. Algorithms 7(3), 2011). Runtime is O(n log n)
-for the sort plus O(n) for the pass; measured < 1 ms for 260 candidates.
+to fill: the gas station problem*, ACM Trans. Algorithms 7(3), 2011). Sorting costs O(n log n). The implementation repeatedly sums the remaining tank lots,
+so its pass is O(n²) in the worst case, despite the linear amortised lot insertions/removals.
+Measured M7 pure optimization was 0.61 ms for 399 live candidates. No optimizer logic was
+changed during M7.
 
 **Feasibility.** On leaving any station the notional tank is full, so the procedure fails only
 where *no* plan can succeed: the starting fuel cannot reach the first station/destination, or
@@ -613,8 +619,9 @@ kept 3,111 points (−93%).
 In `services.plan_route`, after a cache miss the request tries `cache.add(key + ":lock")`
 (atomic in LocMem and in the database cache, so it works across processes sharing the
 database). The holder calls the provider, stores the route and releases the lock. Others poll
-the cache every 50 ms; if the holder fails, a waiter takes the lock and tries once itself (one
-retry total, not one per waiter); after `2 × ROUTING_TIMEOUT + 2 s` a waiter proceeds alone.
+the cache every 50 ms; if the holder fails, a waiter can take the lock and try itself.
+Further failures can allow further waiters to retry; this is not a single retry budget for the
+whole group. After `2 × ROUTING_TIMEOUT + 2 s` a waiter proceeds alone.
 The lock expires after `ROUTING_TIMEOUT + 5 s` if a process dies. Cache errors fall back to an
 uncoordinated call. Tested with 6 threads (1 provider call) and with a failing first call.
 
@@ -646,7 +653,7 @@ pure minimum-cost plan with `stop_policy: null`.
 
 ### Remaining limitations
 
-* No live provider call from Django has been verified (see above).
+* The historical provider block was resolved in M6 and independently rechecked in M7.
 * Coalescing polls; a cache backend with blocking locks would be needed at large scale.
 * Per-process reuse is per worker (each process warms its own LRU).
 * The first `simplified` request for a long route pays ~150 ms.
@@ -664,13 +671,14 @@ Recorded in M0; items 1–7 are now addressed, item 8 remains guidance.
 4. **Greedy is wrong.** Done in M3 (fill up, refund later). Always stopping at the nearest or the cheapest station does not minimise
    cost. The planned algorithm is the standard fixed-route refuelling strategy: at each stop,
    if a cheaper station is reachable within range, buy only enough to reach it; otherwise fill up
-   and continue to the cheapest station within range. It runs in O(n log n) for n candidate
-   stations and is optimal for a fixed route with linear fuel use.
+   and continue to the cheapest station within range. It is optimal for a fixed route with linear fuel use; the current lot-summing
+   implementation has an O(n²) worst case (see the algorithm section).
 5. **Starting fuel and expenditure.** Decided in M3: start with a full tank (configurable),
    report purchases and starting-fuel use separately, value the starting fuel only when a price
    is supplied. See [Model and assumptions](#model-and-assumptions).
 6. **One routing call per uncached route.** Done in M2 — see [Routing layer](#routing-layer-m2).
 7. **No per-station routing calls.** Done in M3. Off-route distance is a geometric approximation along the
-   polyline, which is accurate enough for selecting highway-adjacent stops.
+   polyline. This screens candidates but does not verify pump access, detour mileage or
+   which carriageway can reach the station.
 8. **Preprocess once, query cheaply.** Clean and geolocate the CSV at import time; index
    latitude/longitude; keep per-request work to a bounding-box query and in-memory geometry.

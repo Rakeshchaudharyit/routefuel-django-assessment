@@ -1,0 +1,506 @@
+{
+  "verified_at": "2026-10-22T08:36:32.661085+05:30",
+  "stations": 6626,
+  "geolocated": 6228,
+  "routes": [
+    {
+      "start": "Dallas, TX",
+      "finish": "Atlanta, GA",
+      "repeat": 0,
+      "status": 200,
+      "elapsed_ms": 894.645,
+      "provider_ms": 857.216,
+      "geometry_points": 800,
+      "distance_miles": 778.8,
+      "duration_minutes": 843.9,
+      "summary": {
+        "number_of_stops": 3,
+        "total_gallons_consumed": "77.880",
+        "starting_fuel_used_gallons": "50.000",
+        "total_gallons_purchased": "27.880",
+        "total_purchase_cost": "78.19",
+        "fuel_remaining_at_destination_gallons": "0.000",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": false,
+        "routing_requests": 1,
+        "timings_ms": {
+          "route": 865.03,
+          "station_matching": 12.56,
+          "optimization": 0.23
+        }
+      },
+      "queries": 14,
+      "display_balance_gallons": "0.000"
+    },
+    {
+      "start": "Dallas, TX",
+      "finish": "Atlanta, GA",
+      "repeat": 1,
+      "status": 200,
+      "elapsed_ms": 2.89,
+      "provider_ms": 0,
+      "geometry_points": 800,
+      "distance_miles": 778.8,
+      "duration_minutes": 843.9,
+      "summary": {
+        "number_of_stops": 3,
+        "total_gallons_consumed": "77.880",
+        "starting_fuel_used_gallons": "50.000",
+        "total_gallons_purchased": "27.880",
+        "total_purchase_cost": "78.19",
+        "fuel_remaining_at_destination_gallons": "0.000",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": true,
+        "routing_requests": 0,
+        "timings_ms": {
+          "route": 0.76,
+          "station_matching": 1.29,
+          "optimization": 0.22
+        }
+      },
+      "queries": 2,
+      "display_balance_gallons": "0.000"
+    },
+    {
+      "start": "New York, NY",
+      "finish": "Los Angeles, CA",
+      "repeat": 0,
+      "status": 200,
+      "elapsed_ms": 1038.689,
+      "provider_ms": 694.315,
+      "geometry_points": 3792,
+      "distance_miles": 2810.37,
+      "duration_minutes": 3019.4,
+      "summary": {
+        "number_of_stops": 17,
+        "total_gallons_consumed": "281.037",
+        "starting_fuel_used_gallons": "50.000",
+        "total_gallons_purchased": "231.035",
+        "total_purchase_cost": "698.65",
+        "fuel_remaining_at_destination_gallons": "0.000",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": false,
+        "routing_requests": 1,
+        "timings_ms": {
+          "route": 935.43,
+          "station_matching": 30.83,
+          "optimization": 0.61
+        }
+      },
+      "queries": 14,
+      "display_balance_gallons": "-0.002"
+    },
+    {
+      "start": "New York, NY",
+      "finish": "Los Angeles, CA",
+      "repeat": 1,
+      "status": 200,
+      "elapsed_ms": 5.066,
+      "provider_ms": 0,
+      "geometry_points": 3792,
+      "distance_miles": 2810.37,
+      "duration_minutes": 3019.4,
+      "summary": {
+        "number_of_stops": 17,
+        "total_gallons_consumed": "281.037",
+        "starting_fuel_used_gallons": "50.000",
+        "total_gallons_purchased": "231.035",
+        "total_purchase_cost": "698.65",
+        "fuel_remaining_at_destination_gallons": "0.000",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 50.000 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": true,
+        "routing_requests": 0,
+        "timings_ms": {
+          "route": 2.29,
+          "station_matching": 1.41,
+          "optimization": 0.56
+        }
+      },
+      "queries": 2,
+      "display_balance_gallons": "-0.002"
+    },
+    {
+      "start": "Dallas, TX",
+      "finish": "Austin, TX",
+      "repeat": 0,
+      "status": 200,
+      "elapsed_ms": 468.922,
+      "provider_ms": 178.047,
+      "geometry_points": 225,
+      "distance_miles": 195.6,
+      "duration_minutes": 209.9,
+      "summary": {
+        "number_of_stops": 0,
+        "total_gallons_consumed": "19.560",
+        "starting_fuel_used_gallons": "19.560",
+        "total_gallons_purchased": "0.000",
+        "total_purchase_cost": "0.00",
+        "fuel_remaining_at_destination_gallons": "30.440",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 19.560 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": false,
+        "routing_requests": 1,
+        "timings_ms": {
+          "route": 452.98,
+          "station_matching": 8.31,
+          "optimization": 0.17
+        }
+      },
+      "queries": 14,
+      "display_balance_gallons": "0.000"
+    },
+    {
+      "start": "Dallas, TX",
+      "finish": "Austin, TX",
+      "repeat": 1,
+      "status": 200,
+      "elapsed_ms": 3.571,
+      "provider_ms": 0,
+      "geometry_points": 225,
+      "distance_miles": 195.6,
+      "duration_minutes": 209.9,
+      "summary": {
+        "number_of_stops": 0,
+        "total_gallons_consumed": "19.560",
+        "starting_fuel_used_gallons": "19.560",
+        "total_gallons_purchased": "0.000",
+        "total_purchase_cost": "0.00",
+        "fuel_remaining_at_destination_gallons": "30.440",
+        "starting_fuel_value": null,
+        "estimated_total_fuel_cost": null,
+        "estimated_total_fuel_cost_status": "unavailable",
+        "cost_note": "Whole-trip fuel cost is unavailable: 19.560 gal of starting fuel were used and starting_fuel_price_per_gallon was not provided. total_purchase_cost covers only fuel bought at the recommended stops."
+      },
+      "meta": {
+        "provider": "osrm",
+        "attribution": "Routing \u00a9 OSRM; map data \u00a9 OpenStreetMap contributors (ODbL)",
+        "cached": true,
+        "routing_requests": 0,
+        "timings_ms": {
+          "route": 0.65,
+          "station_matching": 1.72,
+          "optimization": 0.14
+        }
+      },
+      "queries": 2,
+      "display_balance_gallons": "0.000"
+    }
+  ],
+  "errors": [
+    {
+      "case": "invalid_location",
+      "status": 422,
+      "code": "location_not_found",
+      "elapsed_ms": 1.657,
+      "provider_calls": 0
+    },
+    {
+      "case": "infeasible",
+      "status": 422,
+      "code": "no_feasible_fuel_plan",
+      "elapsed_ms": 16.574,
+      "provider_calls": 0
+    },
+    {
+      "case": "unreachable",
+      "status": 422,
+      "code": "route_not_found",
+      "elapsed_ms": 1044.219,
+      "provider_calls": 1
+    },
+    {
+      "case": "invalid_vehicle",
+      "status": 400,
+      "code": "invalid",
+      "elapsed_ms": 1.694,
+      "provider_calls": 0
+    }
+  ],
+  "health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "service": "routefuel-api"
+    }
+  },
+  "minimum_stop_audit": {
+    "minimum_stops": 5,
+    "candidate_count": 399,
+    "one_feasible_minimum_stop_path": [
+      {
+        "opis_id": 61421,
+        "mile": 484.5157
+      },
+      {
+        "opis_id": 5230,
+        "mile": 981.6323
+      },
+      {
+        "opis_id": 65284,
+        "mile": 1464.0345
+      },
+      {
+        "opis_id": 70626,
+        "mile": 1956.6176
+      },
+      {
+        "opis_id": 3593,
+        "mile": 2341.9912
+      }
+    ]
+  },
+  "policies": [
+    {
+      "threshold": null,
+      "stops": 17,
+      "purchase_cost": "698.65",
+      "policy": null,
+      "elapsed_ms": 4.852
+    },
+    {
+      "threshold": "0.10",
+      "stops": 14,
+      "purchase_cost": "698.69",
+      "policy": {
+        "min_savings_per_stop": "0.10",
+        "stops_removed": 3,
+        "removed_station_opis_ids": [
+          70467,
+          52548,
+          72572
+        ],
+        "minimum_purchase_cost": "698.65",
+        "minimum_cost_number_of_stops": 17,
+        "extra_cost": "0.04"
+      },
+      "elapsed_ms": 35.126
+    },
+    {
+      "threshold": "1.00",
+      "stops": 12,
+      "purchase_cost": "699.22",
+      "policy": {
+        "min_savings_per_stop": "1.00",
+        "stops_removed": 5,
+        "removed_station_opis_ids": [
+          70333,
+          70467,
+          69840,
+          52548,
+          72572
+        ],
+        "minimum_purchase_cost": "698.65",
+        "minimum_cost_number_of_stops": 17,
+        "extra_cost": "0.57"
+      },
+      "elapsed_ms": 43.782
+    },
+    {
+      "threshold": "2.00",
+      "stops": 11,
+      "purchase_cost": "700.74",
+      "policy": {
+        "min_savings_per_stop": "2.00",
+        "stops_removed": 6,
+        "removed_station_opis_ids": [
+          72288,
+          70333,
+          70467,
+          69840,
+          52548,
+          72572
+        ],
+        "minimum_purchase_cost": "698.65",
+        "minimum_cost_number_of_stops": 17,
+        "extra_cost": "2.09"
+      },
+      "elapsed_ms": 47.255
+    },
+    {
+      "threshold": "5.00",
+      "stops": 11,
+      "purchase_cost": "700.74",
+      "policy": {
+        "min_savings_per_stop": "5.00",
+        "stops_removed": 6,
+        "removed_station_opis_ids": [
+          72288,
+          70333,
+          70467,
+          69840,
+          52548,
+          72572
+        ],
+        "minimum_purchase_cost": "698.65",
+        "minimum_cost_number_of_stops": 17,
+        "extra_cost": "2.09"
+      },
+      "elapsed_ms": 47.234
+    },
+    {
+      "threshold": "10.00",
+      "stops": 11,
+      "purchase_cost": "700.74",
+      "policy": {
+        "min_savings_per_stop": "10.00",
+        "stops_removed": 6,
+        "removed_station_opis_ids": [
+          72288,
+          70333,
+          70467,
+          69840,
+          52548,
+          72572
+        ],
+        "minimum_purchase_cost": "698.65",
+        "minimum_cost_number_of_stops": 17,
+        "extra_cost": "2.09"
+      },
+      "elapsed_ms": 46.834
+    }
+  ],
+  "marginal_stops": [
+    {
+      "opis_id": 72445,
+      "gallons": 6.168442,
+      "cost_increase_if_excluded": "0.123368848559383520000000",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 72288,
+      "gallons": 30.299859,
+      "cost_increase_if_excluded": "1.514992937052205851000000",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 72501,
+      "gallons": 23.830274,
+      "cost_increase_if_excluded": "0.980745158972385473558080",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 70333,
+      "gallons": 14.883431,
+      "cost_increase_if_excluded": "0.148834314741505190000000",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 70467,
+      "gallons": 1.279975,
+      "cost_increase_if_excluded": "0.040532556703057861464271",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 69840,
+      "gallons": 7.548913,
+      "cost_increase_if_excluded": "0.050326113846609258246631",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 68368,
+      "gallons": 50.0,
+      "cost_increase_if_excluded": "5.039701166034630368833120",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 52548,
+      "gallons": 1.832362,
+      "cost_increase_if_excluded": "-2.029300000E-15",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 65287,
+      "gallons": 9.275456,
+      "cost_increase_if_excluded": "0.629406920241421108963400",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 72599,
+      "gallons": 1.284737,
+      "cost_increase_if_excluded": "0.025694744864511848000000",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 69085,
+      "gallons": 10.974392,
+      "cost_increase_if_excluded": "0.598445608190411618875059",
+      "alternative_stops": 18
+    },
+    {
+      "opis_id": 20009,
+      "gallons": 1.885,
+      "cost_increase_if_excluded": "0.050266649838185577453872",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 73101,
+      "gallons": 15.117794,
+      "cost_increase_if_excluded": "0.075588970356588945000000",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 72572,
+      "gallons": 1.979062,
+      "cost_increase_if_excluded": "-9.59700000E-16",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 60700,
+      "gallons": 2.890085,
+      "cost_increase_if_excluded": "0.240840448324009461061210",
+      "alternative_stops": 16
+    },
+    {
+      "opis_id": 71712,
+      "gallons": 32.792496,
+      "cost_increase_if_excluded": "0.381802784989325804086850",
+      "alternative_stops": 17
+    },
+    {
+      "opis_id": 72965,
+      "gallons": 18.995154,
+      "cost_increase_if_excluded": "1.392977928581383783398550",
+      "alternative_stops": 17
+    }
+  ],
+  "geometry": {
+    "full_points": 35196,
+    "simplified_points": 3792,
+    "full_parse_and_warm_display_ms": 69.802
+  },
+  "provider_calls_total": 4
+}
