@@ -2,7 +2,7 @@
 
 Verified 21 October 2026. M6 implementation complete; M7 not started.
 
-1. **Repository:** `/Users/rakesh/Projects/routefuel`. Extended the existing M5 frontend.
+1. **Repository:** `<repository-root>`. Extended the existing M5 frontend.
 2. **Git status:** HEAD is the M5 preservation commit; M6 frontend/tests/documentation remain
    uncommitted for review. The inherited `frontend/.env.example` remains untracked and was
    excluded from the commit as requested. No unrelated changes were included. No push,

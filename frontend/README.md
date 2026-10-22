@@ -5,11 +5,12 @@ The [v1 API contract](../docs/api-contract.md) is the source of truth.
 
 ## Run locally
 
-Requires Node.js 20.9+ (M6 checks ran with 20.20.2).
+Requires Node.js 20.9+ (checks ran with 20.20.2). Run commands from the repository root unless
+a `cd` is shown. Complete the [backend installation](../README.md#backend-setup) first.
 
 ```sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -28,7 +29,8 @@ M6 verification found an empty local database and populated it with this existin
 no backend source or API contracts were modified.
 
 `NEXT_PUBLIC_API_BASE_URL` defaults to `http://127.0.0.1:8000`. Set it in the environment
-before starting/building Next.js if needed. It is public configuration, never a place for
+before starting/building Next.js if needed, or copy `.env.example` to `.env.local` in
+`frontend/` and edit the public URL. It is public configuration, never a place for
 private keys. Django must allow the browser origin in `DJANGO_CORS_ALLOWED_ORIGINS`.
 The current local configuration allows `http://localhost:3000`.
 

@@ -1,14 +1,15 @@
 # M7 — Final QA and technical review
 
-Date: 22 October 2026 (Asia/Kolkata). Repository: `/Users/rakesh/Projects/routefuel`.
+Date: 22 October 2026 (Asia/Kolkata). Repository: `<repository-root>`.
 
 ## Executive summary
 
 M7 passes the local assessment checks, with limitations below. M6 was reviewed and preserved
 first in local commit `49b4c19` (`M6: live route maps and interactive fuel-stop selection`),
 after its 35 tests, TypeScript, lint and build passed. M5 remains `13fac92`; history and
-commit authorship were not rewritten. M7 changes remain uncommitted for review. Nothing was
-pushed, and M8 was not started.
+commit authorship were not rewritten. This report records M7 completion; M7 was subsequently
+preserved in local commit `d44d473` before M8 preparation. See the [submission checklist](submission-checklist.md)
+for current publication status. Nothing was pushed during M7.
 
 The default optimizer was not changed. Review and independently formulated DP comparisons
 support minimum continuous purchase cost for the fixed-route model. This does not establish

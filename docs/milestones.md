@@ -1,6 +1,6 @@
 # Milestones
 
-Status legend: ✅ done · ⏳ next · ⬜ not started
+Status legend: ✅ done · ⏳ locally prepared, manual completion pending · ⬜ not started
 
 | # | Milestone | Owner | Status |
 |---|-----------|-------|--------|
@@ -12,7 +12,7 @@ Status legend: ✅ done · ⏳ next · ⬜ not started
 | M5 | Professional SaaS Dashboard | Codex | ✅ |
 | M6 | Interactive Map & API Integration | Codex | ✅ |
 | M7 | Testing & Independent Code Review | Codex | ✅ |
-| M8 | GitHub, Postman & Loom Submission | Rakesh | ⬜ |
+| M8 | GitHub, Postman & Loom Submission | Rakesh | ⏳ |
 
 ## M0 — Django Foundation
 
@@ -187,8 +187,19 @@ cost deltas; optimizer logic unchanged. Added 300 thousandth-gallon reference-DP
 
 See [M7 report](m7-final-qa-report.md) for evidence and known limits. This was a Codex audit
 against an independently formulated reference solver; no separate Claude/human sign-off is
-claimed. M8 remains unstarted; nothing pushed.
+claimed. At M7 completion, M8 was unstarted; nothing was pushed. M7 was subsequently
+preserved in local commit `d44d473` before submission preparation.
 
 ## M8 — GitHub, Postman & Loom Submission
 
-Clean public repo, Postman collection, Loom walkthrough under five minutes.
+**Local preparation completed, 22 October 2026:** M7 preserved in `d44d473`; README/setup,
+environment examples, ignore rules and repository contents reviewed. All 416 backend tests,
+36 frontend tests and quality/build checks rerun successfully. Fresh disposable database setup,
+real OSRM verification and eight API smoke statuses pass. Added Postman instructions, spaced
+terminal requests, a 4:50 Loom script, manual GitHub steps and a submission checklist.
+
+**Pending user actions:** review, create/push the public GitHub repository, execute native
+Postman assertions, record Loom below five minutes, verify reviewer access to both links,
+and submit. No repository creation, push, upload, recording or submission has been performed.
+See [M8 preparation report](m8-submission-preparation.md), [submission checklist](submission-checklist.md),
+[Loom script](loom-demo-script.md), and [GitHub steps](github-readiness.md).

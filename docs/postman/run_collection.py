@@ -26,7 +26,10 @@ def main() -> int:
     args = parser.parse_args()
     collection = json.loads(COLLECTION.read_text())
     failures = 0
-    for item in collection["item"]:
+    for index, item in enumerate(collection["item"]):
+        # Keep successive demo requests below the public provider's 1 request/s limit.
+        if index:
+            time.sleep(1.1)
         request = item["request"]
         url = request["url"].replace("{{base_url}}", args.base_url.rstrip("/"))
         data = request.get("body", {}).get("raw")

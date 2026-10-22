@@ -2,7 +2,7 @@
 
 Verified 21 October 2026. M5 only; M6 has not been started.
 
-1. **Working directory:** `/Users/rakesh/Projects/routefuel`, existing repository.
+1. **Working directory:** `<repository-root>`, existing repository.
 2. **Git status:** initially clean at `9a0b155` (M4). Final changes are the modified
    frontend README, new frontend files and this report. No backend source or API contract
    changes; no commits, history edits or pushes.
