@@ -135,6 +135,24 @@ def test_login_and_logout_enforce_csrf(staff):
     assert "_auth_user_id" not in strict.session
 
 
+def test_login_works_behind_https_proxy_and_still_rejects_foreign_origins(staff):
+    # Render terminates TLS: Django receives HTTP plus X-Forwarded-Proto, the browser sends
+    # an https:// Origin. Same-origin logins must pass; other origins must still fail CSRF.
+    # Browsers always send Host; without it the test client reports "testserver:80".
+    proxy = {"HTTP_X_FORWARDED_PROTO": "https", "HTTP_HOST": "testserver"}
+    for origin, expected in (("https://testserver", 302), ("https://evil.example", 403)):
+        strict = Client(enforce_csrf_checks=True)
+        strict.get("/admin/login/", **proxy)
+        token = strict.cookies[settings.CSRF_COOKIE_NAME].value
+        response = strict.post(
+            "/admin/login/",
+            {"username": staff[0].username, "password": staff[1], "csrfmiddlewaretoken": token},
+            HTTP_ORIGIN=origin,
+            **proxy,
+        )
+        assert response.status_code == expected
+
+
 def test_login_does_not_redirect_to_external_next_url(client, staff):
     user, password = staff
     response = client.post(

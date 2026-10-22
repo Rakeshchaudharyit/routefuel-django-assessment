@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 
-from config.settings import env_bool, env_float, env_list
+from config.settings import database_config, env_bool, env_float, env_list
 
 LOCAL_APPS = ["apps.core", "apps.routing", "apps.fuel", "apps.optimization"]
 
@@ -70,3 +70,71 @@ def test_env_float_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch, raw: 
 
     with pytest.raises(ImproperlyConfigured):
         env_float("RF_TEST_FLOAT", default=1.0)
+
+
+NEON_STYLE_URL = "postgresql://rf_user:s3cret-pw@ep-example-pooler.us-east-2.aws.neon.tech/neondb"
+
+
+def test_database_config_uses_sqlite_without_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("RENDER", raising=False)
+
+    assert database_config()["ENGINE"] == "django.db.backends.sqlite3"
+
+
+def test_database_config_uses_postgresql_with_ssl(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", NEON_STYLE_URL)
+
+    config = database_config()
+
+    assert config["ENGINE"] == "django.db.backends.postgresql"
+    assert config["HOST"] == "ep-example-pooler.us-east-2.aws.neon.tech"
+    assert config["NAME"] == "neondb"
+    assert config["OPTIONS"]["sslmode"] == "require"
+    assert config["CONN_HEALTH_CHECKS"] is True
+
+
+def test_database_config_keeps_sslmode_from_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = NEON_STYLE_URL + "?sslmode=verify-full&channel_binding=require"
+    monkeypatch.setenv("DATABASE_URL", url)
+
+    options = database_config()["OPTIONS"]
+
+    assert options["sslmode"] == "verify-full"
+    assert options["channel_binding"] == "require"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "not-a-url",
+        "postgresql//rf_user:s3cret-pw@host/neondb",
+        "postgresql://rf_user:s3cret-pw@host:notaport/neondb",
+        "mysql://rf_user:s3cret-pw@host/neondb",
+        "sqlite:///db.sqlite3",
+        "postgresql://rf_user:s3cret-pw@/neondb",
+        "postgresql://rf_user:s3cret-pw@host/",
+    ],
+)
+def test_database_config_rejects_bad_urls_without_leaking_them(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", url)
+
+    with pytest.raises(ImproperlyConfigured) as excinfo:
+        database_config()
+
+    assert "s3cret-pw" not in str(excinfo.value)
+    assert excinfo.value.__cause__ is None
+
+
+def test_database_config_requires_database_url_on_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+
+    with pytest.raises(ImproperlyConfigured, match="DATABASE_URL must be set on Render"):
+        database_config()
+
+
+def test_proxy_ssl_header_trusts_render_forwarded_proto() -> None:
+    assert settings.SECURE_PROXY_SSL_HEADER == ("HTTP_X_FORWARDED_PROTO", "https")

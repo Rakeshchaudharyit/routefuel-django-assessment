@@ -10,7 +10,9 @@ from __future__ import annotations
 import math
 import os
 from pathlib import Path
+from typing import Any
 
+import dj_database_url
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.validators import URLValidator
 from dotenv import load_dotenv
@@ -106,6 +108,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files (admin CSS/JS) when DEBUG is false, e.g. on Render.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -138,12 +142,36 @@ TEMPLATES = [
 # Database
 # --------------------------------------------------------------------------
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+
+
+def database_config() -> dict[str, Any]:
+    """PostgreSQL (e.g. Neon) from ``DATABASE_URL``; local SQLite only when it is unset.
+
+    A malformed or non-PostgreSQL URL is an error, never a silent SQLite fallback. On Render
+    (which sets ``RENDER=true`` at build and run time) a missing URL is also an error, so
+    ``migrate`` can never run against a throwaway SQLite file there.
+    """
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if not url:
+        if env_bool("RENDER", default=False):
+            raise ImproperlyConfigured("DATABASE_URL must be set on Render.")
+        return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
+    try:
+        config = dj_database_url.parse(url, conn_max_age=60, conn_health_checks=True)
+    except Exception:
+        # Never echo the URL or the parser message: the URL contains the password.
+        raise ImproperlyConfigured("DATABASE_URL is not a valid database URL.") from None
+    if config.get("ENGINE") != "django.db.backends.postgresql":
+        raise ImproperlyConfigured("DATABASE_URL must use the postgres:// or postgresql:// scheme.")
+    if not config.get("HOST") or not config.get("NAME"):
+        raise ImproperlyConfigured("DATABASE_URL must include a host and a database name.")
+    options = config.setdefault("OPTIONS", {})
+    options.setdefault("sslmode", "require")  # Neon requires TLS; a sslmode in the URL wins.
+    options.setdefault("connect_timeout", 10)
+    return config
+
+
+DATABASES = {"default": database_config()}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -159,6 +187,12 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Hashed, compressed copies built by collectstatic; WhiteNoise serves them with far-future
+    # caching. With DEBUG on, Django serves the unhashed source files as before.
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # Admin uses Django's database sessions and default password hashers. Public DRF views
 # retain their explicit empty authentication classes and never consume admin sessions.
@@ -175,6 +209,9 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 8 * 60 * 60
 SESSION_COOKIE_SECURE = env_bool("DJANGO_SECURE_COOKIES", default=not DEBUG)
+# Render terminates TLS and forwards plain HTTP with X-Forwarded-Proto set by its proxy. Trusting
+# it lets Django see admin requests as HTTPS, so CSRF origin checks match https:// origins.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 CSRF_COOKIE_SAMESITE = "Lax"
 
